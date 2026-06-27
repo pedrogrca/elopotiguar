@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elo Potiguar — Plataforma de Beneficência</title>
+  <meta name="description" content="Conectando doadores e voluntários a organizações, com transparência total e acompanhamento em tempo real." />
+
+  <!-- Leaflet (mapa de GPS). Se não houver internet, o app usa um mapa de fallback em canvas. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤝</text></svg>" />
+</head>
+<body>
+  <div class="app">
+    <header class="header" id="header"></header>
+    <main>
+      <div id="view"></div>
+    </main>
+    <footer class="footer">
+      <div class="footer__inner">
+        <div>🤝 <strong>Elo Potiguar</strong> — beneficência com transparência. Projeto de demonstração.</div>
+        <div>Feito para o Rio Grande do Norte 💚</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Ordem importa: config → utils → dados → lógica → componentes → telas → app -->
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/bus.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/logic.js"></script>
+  <script src="assets/js/components.js"></script>
+  <script src="assets/js/views.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
