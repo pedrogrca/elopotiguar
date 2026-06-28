@@ -7,7 +7,9 @@
       "PowerShell(python --version)",
       "PowerShell(py --version)",
       "PowerShell($ErrorActionPreference='SilentlyContinue')",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)"
     ]
   }
 }

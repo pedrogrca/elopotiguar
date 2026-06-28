@@ -107,10 +107,12 @@ EP.logic = (function () {
     var dropoff = { lat: org.location.lat, lng: org.location.lng, address: org.location.address };
     var del = EP.db.insert('deliveries', {
       donationId: donation.id, donorId: donation.donorId, orgId: org.id, delivererId: null,
-      status: 'Aguardando', code: genCode(),
+      status: 'Aguardando',
+      pickupCode: genCode(),   // código do CLIENTE/doador (libera a coleta)
+      dropoffCode: genCode(),  // código da ORGANIZAÇÃO (conclui a entrega)
       pickup: pickup, dropoff: dropoff,
       route: EP.db.buildRoute(pickup, dropoff, 24), routeIndex: 0,
-      delivererLocation: null, acceptedAt: null, deliveredAt: null,
+      delivererLocation: null, acceptedAt: null, collectedAt: null, deliveredAt: null,
     });
     EP.bus.emit('delivery:changed', { deliveryId: del.id });
     return del;
@@ -157,10 +159,29 @@ EP.logic = (function () {
     return del;
   }
 
+  // ETAPA 1 — Coleta no doador: entregador digita o CÓDIGO DO CLIENTE.
+  function collectDelivery(deliveryId, code) {
+    var del = EP.db.get('deliveries', deliveryId);
+    if (!del) throw new Error('Entrega não encontrada.');
+    if (del.status !== 'Aceita') throw new Error('Esta entrega não está na etapa de coleta.');
+    if (String(code).trim() !== String(del.pickupCode)) throw new Error('Código do cliente incorreto. Confira com o doador.');
+    del.status = 'Coletado';
+    del.collectedAt = Date.now();
+    if (del.route && del.route.length) del.delivererLocation = { lat: del.route[0].lat, lng: del.route[0].lng, at: Date.now() };
+    EP.db.touch('deliveries', del);
+    advanceDonation(del.donationId, 'Em rota', del.delivererId, 'Pedido coletado — a caminho da organização.');
+    notify(del.donorId, 'Seu pedido foi coletado pelo entregador 📦', '📦', '#/doacao/' + del.donationId);
+    var oid = orgOwnerId(del.orgId); if (oid) notify(oid, 'Pedido coletado — entregador a caminho 🛵', '🛵', '#/painel?tab=org');
+    EP.bus.emit('delivery:changed', { deliveryId: del.id });
+    return del;
+  }
+
+  // ETAPA 2 — Entrega na organização: entregador digita o CÓDIGO DA ORGANIZAÇÃO.
   function confirmDelivery(deliveryId, code) {
     var del = EP.db.get('deliveries', deliveryId);
     if (!del) throw new Error('Entrega não encontrada.');
-    if (String(code).trim() !== String(del.code)) throw new Error('Código incorreto. Confira com quem está recebendo.');
+    if (del.status !== 'Coletado') throw new Error('Você precisa coletar o pedido primeiro (código do cliente).');
+    if (String(code).trim() !== String(del.dropoffCode)) throw new Error('Código da organização incorreto. Confira com quem está recebendo.');
     del.status = 'Entregue';
     del.deliveredAt = Date.now();
     if (del.route && del.route.length) {
@@ -169,7 +190,7 @@ EP.logic = (function () {
       del.routeIndex = del.route.length - 1;
     }
     EP.db.touch('deliveries', del);
-    advanceDonation(del.donationId, 'Recebido', del.delivererId, 'Entrega confirmada pelo código de segurança.');
+    advanceDonation(del.donationId, 'Recebido', del.delivererId, 'Entrega confirmada pelo código da organização.');
     notify(del.donorId, 'Sua doação foi entregue e recebida pela organização ✅', '✅', '#/doacao/' + del.donationId);
     var oid2 = orgOwnerId(del.orgId); if (oid2) notify(oid2, 'Entrega concluída e confirmada por código ✅', '✅', '#/painel?tab=org');
     EP.bus.emit('delivery:changed', { deliveryId: del.id });
@@ -344,7 +365,8 @@ EP.logic = (function () {
     trustTier: trustTier, awardPoints: awardPoints, pointsLog: pointsLog,
     statusMeta: statusMeta, nextOrgStatuses: nextOrgStatuses, advanceDonation: advanceDonation, createDonation: createDonation,
     createDelivery: createDelivery, openDeliveries: openDeliveries, acceptDelivery: acceptDelivery,
-    setDeliveryStatus: setDeliveryStatus, updateDelivererLocation: updateDelivererLocation, confirmDelivery: confirmDelivery,
+    setDeliveryStatus: setDeliveryStatus, updateDelivererLocation: updateDelivererLocation,
+    collectDelivery: collectDelivery, confirmDelivery: confirmDelivery,
     createPost: createPost, feed: feed,
     orgRanking: orgRanking, prioritizedOrgs: prioritizedOrgs,
     matchesForUser: matchesForUser, recommendOrgs: recommendOrgs, scoreNeed: scoreNeed,

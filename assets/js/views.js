@@ -390,6 +390,21 @@ EP.views = (function () {
     ]);
   }
 
+  // Mostra o código certo conforme o papel: doador vê o de COLETA, organização vê o de ENTREGA.
+  function deliveryCodeBox(del, user) {
+    if (!user || del.status === 'Entregue') return el('div');
+    var isDonor = user.id === del.donorId;
+    var isOrg = EP.logic.orgOwnerId(del.orgId) === user.id;
+    if (isDonor && del.status === 'Aceita') {
+      return el('div.code-box', {}, [el('span.muted.tiny', { text: '📦 Seu código de COLETA (informe ao entregador na coleta)' }), el('div.code', { text: del.pickupCode })]);
+    }
+    if (isOrg) {
+      return el('div.code-box', {}, [el('span.muted.tiny', { text: '✅ Código de ENTREGA (informe ao entregador na chegada)' }), el('div.code', { text: del.dropoffCode })]);
+    }
+    if (isDonor) return el('div.code-box', {}, [el('span.muted.tiny', { text: 'Coleta confirmada ✓' }), el('div.muted', { text: 'A organização concluirá com o código de entrega.' })]);
+    return el('div');
+  }
+
   function deliveryTrackingCard(del, user) {
     var dstatus = cfg.deliveryStatuses.find(function (s) { return s.key === del.status; }) || {};
     var deliverer = del.delivererId ? EP.db.get('users', del.delivererId) : null;
@@ -405,7 +420,7 @@ EP.views = (function () {
           el('div', {}, [el('span.muted.tiny', { text: 'Coleta' }), el('div', { text: del.pickup.address })]),
           el('div', {}, [el('span.muted.tiny', { text: 'Entrega' }), el('div', { text: del.dropoff.address })]),
           el('div', {}, [el('span.muted.tiny', { text: 'Entregador' }), el('div', { text: deliverer ? deliverer.name : 'Aguardando voluntário' })]),
-          el('div.code-box', {}, [el('span.muted.tiny', { text: 'Código de segurança (informe ao entregador)' }), el('div.code', { text: del.code })]),
+          deliveryCodeBox(del, user),
         ]),
       ]),
     ]);
@@ -449,8 +464,8 @@ EP.views = (function () {
     var emailIn = input({ type: 'email', placeholder: 'seu@email.com' });
     var passIn = input({ type: 'password', placeholder: 'Senha' });
 
-    function submit() {
-      try { EP.auth.login(emailIn.value, passIn.value); EP.ui.toast('Bem-vindo(a) de volta!', 'success'); EP.app.go('#/painel'); }
+    async function submit() {
+      try { await EP.auth.login(emailIn.value, passIn.value); EP.ui.toast('Bem-vindo(a) de volta!', 'success'); EP.app.go('#/painel'); }
       catch (e) { EP.ui.toast(e.message, 'danger'); }
     }
     [emailIn, passIn].forEach(function (i) { i.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); }); });
@@ -539,10 +554,36 @@ EP.views = (function () {
     }
     renderExtra();
 
-    function submit() {
+    // Medidor de força de senha
+    var pwMeterBar = el('div.pw-meter__bar');
+    var pwMeterLabel = el('span.pw-meter__label.tiny');
+    var pwMeter = el('div.pw-meter', {}, [el('div.pw-meter__track', {}, [pwMeterBar]), pwMeterLabel]);
+    function updateMeter() {
+      var pw = passIn.value;
+      if (!pw) { pwMeterBar.style.width = '0%'; pwMeterLabel.textContent = ''; return; }
+      var s = EP.auth.passwordStrength(pw);
+      pwMeterBar.style.width = ((s.score + 1) / 5 * 100) + '%';
+      pwMeterBar.style.background = s.color;
+      pwMeterLabel.textContent = 'Força: ' + s.label;
+      pwMeterLabel.style.color = s.color;
+    }
+    passIn.addEventListener('input', updateMeter);
+    passIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+
+    // Consentimento LGPD (obrigatório)
+    var consentChk = el('input', { type: 'checkbox' });
+    var consentBox = el('label.consent', {}, [
+      consentChk,
+      el('span', {}, ['Li e concordo com a ', el('a.link', { href: '#/privacidade', target: '_blank', text: 'Política de Privacidade' }),
+        ' e os ', el('a.link', { href: '#/termos', target: '_blank', text: 'Termos de Uso' }),
+        ', e autorizo o tratamento dos meus dados conforme a LGPD.']),
+    ]);
+
+    async function submit() {
       try {
         var data = {
           name: nameIn.value, email: emailIn.value, password: passIn.value, roles: roles,
+          consent: consentChk.checked,
           skills: skillsChips.getValue(), interests: interestsChips.getValue(),
           location: { city: cityIn.value.trim(), lat: cfg.map.center.lat, lng: cfg.map.center.lng },
         };
@@ -550,7 +591,7 @@ EP.views = (function () {
           if (!orgName.value.trim()) throw new Error('Informe o nome da organização.');
           data.org = { name: orgName.value.trim(), category: orgCat.value, description: orgDesc.value, vulnerability: orgVuln.value, city: cityIn.value.trim() };
         }
-        EP.auth.register(data);
+        await EP.auth.register(data);
         EP.ui.toast('Conta criada! Bem-vindo(a) ao ' + cfg.app.name + ' 🎉', 'success');
         EP.app.go('#/painel');
       } catch (e) { EP.ui.toast(e.message, 'danger'); }
@@ -561,10 +602,13 @@ EP.views = (function () {
         el('h1', { text: 'Criar conta' }),
         el('p.muted', { text: 'Conta de pessoa: combine Doador, Voluntário e Entregador. "Organização" é um tipo de conta à parte.' }),
         el('div.form-grid', {}, [field('Nome', nameIn), field('Cidade', cityIn), field('E-mail', emailIn), field('Senha', passIn)]),
+        pwMeter,
         field('Eu quero participar como:', roleRow),
         extraHost,
+        consentBox,
         el('button.btn.btn--primary.btn--block', { text: 'Criar conta', onClick: submit }),
         el('p.muted.center', {}, ['Já tem conta? ', el('a.link', { href: '#/entrar', text: 'Entrar' })]),
+        el('p.muted.tiny.center', { text: '🔒 Sua senha é protegida com PBKDF2 (150.000 iterações) e nunca é armazenada em texto.' }),
       ]),
     ]);
   }
@@ -731,7 +775,15 @@ EP.views = (function () {
           ]),
           C.statusPill(d.status),
         ]),
-        d.delivery ? el('div.muted.tiny', { text: '🛵 Esta doação está sendo entregue. O status avançará automaticamente após a entrega confirmada.' }) : null,
+        (function () {
+          if (!d.delivery) return null;
+          var del = EP.db.get('deliveries', d.delivery);
+          if (!del || del.status === 'Entregue') return null;
+          return el('div.org-deliv-code', {}, [
+            el('span.muted.tiny', { text: '🛵 Entrega em andamento — informe ao entregador, na chegada, o código de entrega:' }),
+            el('span.code-inline', { text: del.dropoffCode }),
+          ]);
+        })(),
         actions.length ? el('div.org-don__actions', {}, actions) : (d.status === 'Usado' ? el('div.muted.tiny', { text: '✅ Ciclo concluído.' }) : null),
         el('div.org-don__actions', {}, [
           (d.status === 'Usado' || d.status === 'Em estoque') ? el('button.btn.btn--sm.btn--accent', { text: '📣 Publicar impacto', onClick: function () { postForm(org, d); } }) : null,
@@ -1040,14 +1092,11 @@ EP.views = (function () {
           var idx = (fresh.routeIndex || 0) + 1;
           if (idx >= fresh.route.length) {
             clearInterval(simTimer); simTimer = null; EP.app.setLiveBusy(false);
-            if (del.status === 'Aceita') EP.logic.setDeliveryStatus(del.id, 'Coletado');
-            EP.ui.toast('Você chegou ao destino. Confirme a entrega com o código.', 'info');
+            EP.ui.toast(del.status === 'Aceita' ? 'Você chegou na coleta. Confirme com o código do cliente.' : 'Você chegou na organização. Confirme com o código de entrega.', 'info');
             renderControls();
             return;
           }
           var pt = fresh.route[idx];
-          // ao passar do meio do caminho, marca "Coletado"
-          if (idx >= Math.floor(fresh.route.length / 2) && del.status === 'Aceita') { EP.logic.setDeliveryStatus(del.id, 'Coletado'); del.status = 'Coletado'; renderStatus(); }
           EP.logic.updateDelivererLocation(del.id, pt.lat, pt.lng, idx);
           del.delivererLocation = { lat: pt.lat, lng: pt.lng, at: Date.now() };
           map.update({ courier: pt, follow: true });
@@ -1061,14 +1110,13 @@ EP.views = (function () {
       var gpsBtn = el('button.btn.btn--sm.btn--ghost', { text: '📍 Usar meu GPS real', onClick: function () { startRealGps(del, map); } });
       controls.appendChild(gpsBtn);
 
-      // Marcar coletado
+      // Etapa 1: COLETA — exige o código do CLIENTE (doador)
       if (del.status === 'Aceita') {
-        controls.appendChild(el('button.btn.btn--sm.btn--ghost', { text: '📦 Marcar coletado', onClick: function () { EP.logic.setDeliveryStatus(del.id, 'Coletado'); del.status = 'Coletado'; renderStatus(); renderControls(); } }));
+        controls.appendChild(el('button.btn.btn--sm.btn--primary', { text: '📦 Confirmar coleta (código do cliente)', onClick: function () { deliveryCodeModal(del, 'collect'); } }));
       }
-
-      // Confirmar entrega (código)
-      if (del.status !== 'Entregue') {
-        controls.appendChild(el('button.btn.btn--sm.btn--primary', { text: '✅ Confirmar entrega (código)', onClick: function () { confirmDeliveryModal(del); } }));
+      // Etapa 2: ENTREGA — exige o código da ORGANIZAÇÃO
+      if (del.status === 'Coletado') {
+        controls.appendChild(el('button.btn.btn--sm.btn--primary', { text: '✅ Confirmar entrega (código da organização)', onClick: function () { deliveryCodeModal(del, 'deliver'); } }));
       }
     }
 
@@ -1093,7 +1141,10 @@ EP.views = (function () {
         mapHost,
         el('div.deliv-route.muted.tiny', {}, [el('div', { text: '📦 Coleta: ' + del.pickup.address }), el('div', { text: '🏛️ Entrega: ' + del.dropoff.address })]),
         controls,
-        el('div.code-hint.muted.tiny', { text: 'Peça o código de 4 dígitos a quem receber para confirmar a entrega.' }),
+        el('div.code-hint.muted.tiny', {}, [
+          el('div', { text: '1️⃣ Na coleta, peça ao cliente (doador) o código de coleta.' }),
+          el('div', { text: '2️⃣ Na organização, peça o código de entrega para concluir.' }),
+        ]),
       ]),
     ]);
   }
@@ -1113,17 +1164,29 @@ EP.views = (function () {
     EP.ui.toast('Rastreamento GPS real ativo. 📍', 'success');
   }
 
-  function confirmDeliveryModal(del) {
-    var codeIn = input({ inputmode: 'numeric', maxlength: '4', placeholder: '0000', style: { fontSize: '24px', letterSpacing: '8px', textAlign: 'center' } });
-    EP.ui.modal({
-      title: '✅ Confirmar entrega',
-      body: el('div', {}, [el('p.muted', { text: 'Digite o código de 4 dígitos informado por quem está recebendo a doação:' }), codeIn]),
+  // stage: 'collect' (código do cliente, na coleta) | 'deliver' (código da organização, na entrega)
+  function deliveryCodeModal(del, stage) {
+    var isCollect = stage === 'collect';
+    var codeIn = input({ inputmode: 'numeric', maxlength: '4', placeholder: '0000', style: { fontSize: '26px', letterSpacing: '10px', textAlign: 'center' } });
+    codeIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    function submit() {
+      try {
+        if (isCollect) { EP.logic.collectDelivery(del.id, codeIn.value); EP.ui.toast('Coleta confirmada! Siga para a organização. 🛵', 'success'); }
+        else { EP.logic.confirmDelivery(del.id, codeIn.value); EP.ui.toast('Entrega concluída! Obrigado por mediar. 🙌', 'success'); }
+        m.close(); EP.app.render();
+      } catch (e) { EP.ui.toast(e.message, 'danger'); }
+    }
+    var m = EP.ui.modal({
+      title: isCollect ? '📦 Confirmar coleta' : '✅ Confirmar entrega',
+      body: el('div', {}, [
+        el('p.muted', { text: isCollect
+          ? 'Peça ao CLIENTE (doador) o código de coleta de 4 dígitos e digite abaixo:'
+          : 'Peça à ORGANIZAÇÃO o código de entrega de 4 dígitos e digite abaixo:' }),
+        codeIn,
+      ]),
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Confirmar', kind: 'primary', onClick: function () {
-          try { EP.logic.confirmDelivery(del.id, codeIn.value); EP.ui.toast('Entrega confirmada! Obrigado por mediar. 🙌', 'success'); EP.app.render(); }
-          catch (e) { EP.ui.toast(e.message, 'danger'); return false; }
-        } },
+        { label: isCollect ? 'Confirmar coleta' : 'Confirmar entrega', kind: 'primary', onClick: function () { submit(); return false; } },
       ],
     });
   }
@@ -1139,6 +1202,101 @@ EP.views = (function () {
   }
 
   /* ====================================================================== */
+  /* LGPD: Privacidade, Termos e "Meus dados"                                */
+  /* ====================================================================== */
+  function privacy() {
+    var L = cfg.legal;
+    return page({ title: '🔒 Política de Privacidade', subtitle: 'Versão ' + L.privacyVersion + ' · atualizada em ' + L.updatedAt }, [
+      el('div.card.legal-doc', {}, [
+        el('h3', { text: 'Quem é o controlador' }),
+        el('p', { text: L.controller + ' é o controlador dos seus dados. Encarregado (DPO): ' + L.dpoEmail + '.' }),
+        el('h3', { text: 'Quais dados coletamos e por quê' }),
+        el('table.legal-table', {}, [
+          el('thead', {}, [el('tr', {}, [el('th', { text: 'Dado' }), el('th', { text: 'Finalidade' })])]),
+          el('tbody', {}, L.dataCollected.map(function (d) { return el('tr', {}, [el('td', { text: d.item }), el('td', { text: d.why })]); })),
+        ]),
+        el('h3', { text: 'Base legal' }),
+        el('p', { text: L.legalBasis }),
+        el('h3', { text: 'Segurança' }),
+        el('p', { text: 'Sua senha é protegida com hash PBKDF2-HMAC-SHA256 (150.000 iterações e salt único) — nunca guardamos a senha em texto. O acesso é por HTTPS e a localização do entregador só é compartilhada durante a entrega.' }),
+        el('h3', { text: 'Seus direitos (art. 18 da LGPD)' }),
+        el('p', { text: 'Você pode acessar, corrigir, exportar e excluir seus dados a qualquer momento em "Meus dados". Para dúvidas, fale com o encarregado: ' + L.dpoEmail + '.' }),
+        el('h3', { text: 'Retenção' }),
+        el('p', { text: L.retention }),
+        el('div.legal-actions', {}, [
+          EP.auth.isLoggedIn() ? el('a.btn.btn--primary', { href: '#/meus-dados', text: 'Gerenciar meus dados' }) : null,
+          el('a.btn.btn--ghost', { href: '#/termos', text: 'Ver Termos de Uso' }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function terms() {
+    var L = cfg.legal;
+    return page({ title: '📄 Termos de Uso', subtitle: 'Versão ' + L.termsVersion + ' · ' + L.updatedAt }, [
+      el('div.card.legal-doc', {}, [
+        el('p', { text: 'Bem-vindo ao ' + cfg.app.name + '. Ao usar a plataforma, você concorda com estes termos.' }),
+        el('h3', { text: '1. Finalidade' }),
+        el('p', { text: 'Conectamos doadores e voluntários a organizações, com rastreio transparente das doações. Não nos responsabilizamos por acordos feitos fora da plataforma.' }),
+        el('h3', { text: '2. Conduta' }),
+        el('p', { text: 'Você se compromete a fornecer informações verdadeiras, não fraudar doações ou entregas, e respeitar as organizações e demais usuários.' }),
+        el('h3', { text: '3. Entregas' }),
+        el('p', { text: 'A mediação por entregador voluntário usa códigos de coleta e de entrega para confirmar cada etapa. O rastreamento por GPS ocorre apenas durante a entrega.' }),
+        el('h3', { text: '4. Doações' }),
+        el('p', { text: 'Nesta versão, pagamentos financeiros são simulados (sem cobrança real). A organização confirma o recebimento e o uso de cada recurso.' }),
+        el('h3', { text: '5. Privacidade' }),
+        el('p', {}, ['O tratamento de dados segue a ', el('a.link', { href: '#/privacidade', text: 'Política de Privacidade' }), ' e a LGPD.']),
+      ]),
+    ]);
+  }
+
+  function myData() {
+    if (!requireLogin('gerenciar seus dados')) return el('div');
+    var user = EP.auth.currentUser();
+    var data = EP.auth.exportData(user.id);
+    var counts = {
+      doacoes: data.doacoes.length, candidaturas: data.candidaturas.length, notificacoes: data.notificacoes.length,
+    };
+
+    function download() {
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'meus-dados-elo-potiguar.json'; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
+      EP.ui.toast('Seus dados foram exportados. 📦', 'success');
+    }
+    function removeAccount() {
+      EP.ui.confirm('Tem certeza? Sua conta e dados pessoais serão excluídos e o histórico de doações será anonimizado. Esta ação é irreversível.',
+        function () { EP.auth.deleteAccount(user.id); EP.ui.toast('Conta excluída. Seus dados pessoais foram removidos.', 'info'); EP.app.go('#/'); },
+        { danger: true, yesLabel: 'Excluir minha conta' });
+    }
+
+    return page({ title: '🗂️ Meus dados (LGPD)', subtitle: 'Transparência e controle total sobre suas informações.' }, [
+      el('div.card', {}, [
+        el('h3', { text: 'O que temos sobre você' }),
+        el('div.mydata-grid', {}, [
+          C.statCard(counts.doacoes, 'Doações', '📦'),
+          C.statCard(counts.candidaturas, 'Candidaturas', '🙋'),
+          C.statCard(counts.notificacoes, 'Notificações', '🔔'),
+        ]),
+        el('p.muted.tiny', { text: 'Consentimento registrado em ' + (user.consent ? EP.ui.fmtDate(user.consent.at) : '—') + ' (Política v' + (user.consent ? user.consent.privacyVersion : '—') + ').' }),
+      ]),
+      el('div.card', {}, [
+        el('h3', { text: '⬇️ Direito de acesso e portabilidade' }),
+        el('p.muted', { text: 'Baixe uma cópia completa dos seus dados em formato aberto (JSON).' }),
+        el('button.btn.btn--primary', { text: 'Exportar meus dados', onClick: download }),
+      ]),
+      el('div.card.danger-zone', {}, [
+        el('h3', { text: '🗑️ Direito de eliminação' }),
+        el('p.muted', { text: 'Exclua sua conta. Seus dados pessoais são removidos e o histórico é anonimizado (preservando a transparência das organizações).' }),
+        el('button.btn.btn--danger', { text: 'Excluir minha conta', onClick: removeAccount }),
+      ]),
+      el('p.muted.tiny', {}, ['Dúvidas sobre seus dados? Fale com o encarregado (DPO): ', el('a.link', { href: 'mailto:' + cfg.legal.dpoEmail, text: cfg.legal.dpoEmail }), '.']),
+    ]);
+  }
+
+  /* ====================================================================== */
   /* UTIL                                                                    */
   /* ====================================================================== */
   function notFound(msg) {
@@ -1148,6 +1306,7 @@ EP.views = (function () {
   return {
     home: home, orgsList: orgsList, orgDetail: orgDetail, donate: donate, donationDetail: donationDetail,
     login: login, register: register, dashboard: dashboard, feed: feed,
+    privacy: privacy, terms: terms, myData: myData,
     applyVolunteer: applyVolunteer, notFound: notFound,
   };
 })();

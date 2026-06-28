@@ -45,6 +45,9 @@ EP.app = (function () {
     'cadastro': EP.views.register,
     'painel': EP.views.dashboard,
     'impacto': EP.views.feed,
+    'privacidade': EP.views.privacy,
+    'termos': EP.views.terms,
+    'meus-dados': EP.views.myData,
   };
 
   /* ---- Render principal ------------------------------------------------- */
@@ -155,6 +158,7 @@ EP.app = (function () {
   function userMenu(user) {
     var menu = el('div.menu', { class: 'menu--hidden' }, [
       el('a.menu__item', { href: '#/painel', text: '📊 Meu painel' }),
+      el('a.menu__item', { href: '#/meus-dados', text: '🗂️ Meus dados (LGPD)' }),
       el('div.menu__sep'),
       el('button.menu__item', { text: '🚪 Sair', onClick: function () { EP.auth.logout(); go('#/'); EP.ui.toast('Você saiu da conta.', 'info'); } }),
     ]);
@@ -169,13 +173,23 @@ EP.app = (function () {
     var menu = el('div.menu.menu--right', { class: 'menu--hidden' }, [
       el('div.menu__title', { text: 'Ferramentas (demo)' }),
       el('button.menu__item', { text: '🔄 Recarregar dados de exemplo', onClick: function () {
-        EP.ui.confirm('Isso apaga os dados atuais e recria os exemplos. Continuar?', function () {
-          EP.db.reset(true); EP.auth.logout(); go('#/'); EP.ui.toast('Dados de exemplo recarregados.', 'success');
+        EP.ui.confirm('Isso apaga os dados atuais e recria os exemplos. Continuar?', async function () {
+          EP.auth.logout();
+          if (EP.db.supaMode()) {
+            overlay('<div class="boot-spinner"></div><h3>Recriando dados no Supabase…</h3>');
+            try { await EP.supa.reseed(); hideOverlay(); go('#/'); render(); EP.ui.toast('Dados de exemplo recarregados.', 'success'); }
+            catch (e) { hideOverlay(); EP.ui.toast('Falha ao recriar: ' + (e.message || e), 'danger'); }
+          } else { EP.db.reset(true); go('#/'); EP.ui.toast('Dados de exemplo recarregados.', 'success'); }
         }, { danger: true, yesLabel: 'Resetar' });
       } }),
       el('button.menu__item', { text: '🗑️ Limpar tudo (zerar)', onClick: function () {
-        EP.ui.confirm('Apagar TODOS os dados (sem recriar exemplos)?', function () {
-          EP.db.reset(false); EP.auth.logout(); go('#/'); EP.ui.toast('Banco zerado.', 'info');
+        EP.ui.confirm('Apagar TODOS os dados (sem recriar exemplos)?', async function () {
+          EP.auth.logout();
+          if (EP.db.supaMode()) {
+            overlay('<div class="boot-spinner"></div><h3>Limpando…</h3>');
+            try { await EP.supa.clearData(); hideOverlay(); go('#/'); render(); EP.ui.toast('Banco zerado.', 'info'); }
+            catch (e) { hideOverlay(); EP.ui.toast('Falha: ' + (e.message || e), 'danger'); }
+          } else { EP.db.reset(false); go('#/'); EP.ui.toast('Banco zerado.', 'info'); }
         }, { danger: true, yesLabel: 'Apagar' });
       } }),
       el('div.menu__sep'),
@@ -208,7 +222,7 @@ EP.app = (function () {
     if (!location.hash) location.hash = '#/';
 
     if (EP.db.supaMode()) bootSupabase();
-    else { EP.db.load(); render(); ready(); }
+    else { EP.db.load(); render(); ready(); EP.chatbot && EP.chatbot.mount(); }
   }
 
   async function bootSupabase() {
@@ -220,6 +234,7 @@ EP.app = (function () {
       setupRealtime();
       hideOverlay();
       render(); ready();
+      EP.chatbot && EP.chatbot.mount();
       if (r.seeded) EP.ui.toast('Banco criado no Supabase com dados de exemplo. 🎉', 'success');
     } catch (e) {
       console.error(e);
@@ -240,6 +255,7 @@ EP.app = (function () {
   var remoteTimer = null;
   function setupRealtime() {
     EP.supa.subscribe(function (coll, payload) {
+      if (EP.supa.isMuted && EP.supa.isMuted()) return;   // ignora ecos durante reseed/limpeza
       var newRow = payload['new'] && payload['new'].doc;
       var oldId = payload['old'] && payload['old'].id;
       if (payload.eventType === 'DELETE') EP.db.mergeRemote(coll, 'delete', { id: oldId });

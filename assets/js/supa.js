@@ -18,6 +18,8 @@ EP.supa = (function () {
   var COLLS = Object.keys(TABLES);
   var client = null;
   var channel = null;
+  var muted = false;   // silencia o Realtime durante reseed/limpeza (evita corrida)
+  function isMuted() { return muted; }
 
   function active() { return !!(EP.config.backend && EP.config.backend.mode === 'supabase'); }
 
@@ -82,6 +84,26 @@ EP.supa = (function () {
     return channel;
   }
 
+  /* ---- Reseed seguro: limpa, regrava o seed e recarrega do banco -------- */
+  async function reseed() {
+    create();
+    muted = true;                                   // ignora ecos do Realtime durante a operação
+    try {
+      var seed = JSON.parse(JSON.stringify(EP.db.buildSeedState())); // cópia imutável p/ o upload
+      await clearAll();
+      await pushAll(seed);
+      var state = await loadAll();                   // fonte da verdade após gravar
+      EP.db.setState(state);
+      return state;
+    } finally { muted = false; }
+  }
+  async function clearData() {
+    create();
+    muted = true;
+    try { await clearAll(); EP.db.setState(null); return EP.db.load(); }
+    finally { muted = false; }
+  }
+
   /* ---- Inicializa: cria cliente, carrega (semeia se vazio) -------------- */
   async function init() {
     create();
@@ -99,7 +121,8 @@ EP.supa = (function () {
 
   return {
     active: active, create: create, init: init, loadAll: loadAll,
-    push: push, pushAll: pushAll, clearAll: clearAll, subscribe: subscribe,
+    push: push, pushAll: pushAll, clearAll: clearAll, clearData: clearData,
+    reseed: reseed, subscribe: subscribe, isMuted: isMuted,
     TABLES: TABLES, COLLS: COLLS, client: function () { return client; },
   };
 })();

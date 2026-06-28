@@ -4,8 +4,9 @@
     {
       "name": "elo-potiguar",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-m", "http.server", "8000"],
-      "port": 8000
+      "runtimeArgs": ["-m", "http.server", "5173"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

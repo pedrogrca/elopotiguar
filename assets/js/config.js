@@ -136,6 +136,41 @@ EP.config = {
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzemhhbHdwenJwYnF3eG1oZ3F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1OTM0ODgsImV4cCI6MjA5ODE2OTQ4OH0.-1IjvVm24umM9Hdz8ePWb2pEIclLz5nCW-nrPsuJKWg',
   },
 
+  /* ---- LGPD / Jurídico (customize) ------------------------------------- */
+  legal: {
+    controller: 'Elo Potiguar',                 // controlador dos dados
+    dpoEmail: 'privacidade@elopotiguar.org',     // encarregado (DPO)
+    privacyVersion: '1.0',
+    termsVersion: '1.0',
+    updatedAt: '2026-06-28',
+    // Dados coletados e finalidade (transparência — art. 9º LGPD)
+    dataCollected: [
+      { item: 'Nome', why: 'Identificar você na plataforma' },
+      { item: 'E-mail', why: 'Login, segurança e comunicações essenciais' },
+      { item: 'Senha (cifrada)', why: 'Autenticar seu acesso — guardada apenas como hash PBKDF2' },
+      { item: 'Cidade', why: 'Aproximar você de causas e entregas próximas' },
+      { item: 'Habilidades e interesses', why: 'Conectar voluntários às necessidades certas (opcional)' },
+      { item: 'Localização durante a entrega', why: 'Rastreamento em tempo real, apenas enquanto a entrega ocorre' },
+    ],
+    legalBasis: 'Consentimento e execução de serviço (art. 7º, I e V, LGPD).',
+    retention: 'Mantemos seus dados enquanto a conta existir. Você pode exportar ou excluir a qualquer momento.',
+  },
+
+  /* ---- Assistente / Chatbot (Eloá) ------------------------------------- */
+  assistant: {
+    enabled: true,
+    name: 'Eloá',
+    emoji: '💬',
+    greeting: 'Oi! Eu sou a Eloá 🤝 Posso te conectar a uma organização que combina com você, explicar como funciona a doação e o rastreio, e tirar dúvidas. Como posso ajudar?',
+    suggestions: ['Quero doar', 'Conecte-me a uma causa', 'Por que devo doar?', 'Como funciona a entrega?'],
+    // Modo IA (opcional). Sem chave, a Eloá responde no modo local (fundamentado nos dados do app).
+    provider: 'anthropic',          // 'anthropic' (Claude) ou 'openai' (GPT)
+    model: 'claude-opus-4-8',       // modelo Claude (troque se quiser; ex.: 'claude-haiku-4-5' p/ menor custo)
+    openaiModel: 'gpt-4o-mini',     // modelo OpenAI, se provider = 'openai'
+    apiKey: '',                     // NÃO embuta uma chave aqui em produção. Cada usuário cola a sua em ⚙️ (guardada só no navegador dele). Em produção, use um proxy (Supabase Edge Function).
+    maxTokens: 1024,
+  },
+
   /* ---- Geral ------------------------------------------------------------ */
   currency: (n) => 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   storageKey: 'elo_potiguar_db_v1',

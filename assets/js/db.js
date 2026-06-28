@@ -251,10 +251,10 @@ EP.db = (function () {
 
     var route = buildRoute(d4.pickup, org1.location, 24);
     var del = { id: id('del'), donationId: d4.id, donorId: marina.id, orgId: org1.id, delivererId: joao.id,
-      status: 'Coletado', code: '4821',
+      status: 'Coletado', pickupCode: '4821', dropoffCode: '7390',
       pickup: d4.pickup, dropoff: { lat: org1.location.lat, lng: org1.location.lng, address: org1.location.address },
       route: route, routeIndex: 8, delivererLocation: { lat: route[8].lat, lng: route[8].lng, at: now - 60000 },
-      createdAt: now - 1 * 3600000, acceptedAt: now - 50 * 60000, deliveredAt: null };
+      createdAt: now - 1 * 3600000, acceptedAt: now - 50 * 60000, collectedAt: now - 40 * 60000, deliveredAt: null };
     state.deliveries.push(del);
     d4.delivery = del.id;
 

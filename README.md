@@ -68,9 +68,10 @@ Cada item abaixo corresponde diretamente ao que foi pedido:
 - **GPS em tempo real**: o entregador pode usar o **GPS real do dispositivo** ou **simular o trajeto**
   (para demonstração). A posição é transmitida ao vivo e o doador/organização veem o marcador se
   movendo no mapa.
-- **Código de segurança de 4 dígitos** (estilo iFood): a doação só é confirmada como entregue quando
-  o entregador digita o código informado por quem recebe — e isso avança a doação automaticamente
-  para "Recebido".
+- **Dois códigos de segurança (estilo iFood), gerados automaticamente:**
+  1. Na **coleta**, o entregador digita o **código do cliente (doador)** para confirmar que pegou o pedido.
+  2. Na **organização**, digita o **código de entrega** para concluir.
+  Só com os dois a doação avança para "Recebido". Cada papel vê apenas o código que lhe cabe.
 
 ### 6. Notificações em tempo real (🔔)
 - Um **sininho** no topo mostra avisos por usuário: mudança de status da doação, entrega aceita,
@@ -263,6 +264,25 @@ surge .          # escolha um domínio .surge.sh
 > (Cloudflare Pages, Firebase Hosting, S3, etc.).
 
 ---
+
+## 💬 Assistente "Eloá" (chatbot)
+
+Um assistente conversacional ajuda doadores e voluntários a **encontrar a organização certa**, dá **motivos para doar** e tira dúvidas (doação, rastreio, entrega, pontos, LGPD). Fica no botão flutuante 💬 no canto inferior direito. Funciona em dois modos:
+
+- **Local (padrão, sem chave):** respostas **fundamentadas nos dados reais do app** (organizações, vulnerabilidade, necessidades, status, pontos, LGPD) com atalhos clicáveis para as organizações. Sempre funciona, sem custo nem internet.
+- **IA (opcional):** clique no ⚙️ dentro do chat, escolha **Claude (Anthropic)** ou **GPT (OpenAI)** e cole **sua própria chave de API** — ela é guardada **apenas no seu navegador** e o app usa os dados da plataforma como contexto do LLM.
+
+Customização em [`assets/js/config.js`](assets/js/config.js) → bloco `assistant` (nome, saudação, sugestões, provedor, modelo). Código em [`assets/js/chatbot.js`](assets/js/chatbot.js).
+
+> 🔒 **Segurança da chave:** **não embuta** uma chave de API no `config.js` de um site público — qualquer um a veria. O padrão é cada usuário colar a própria chave (modo demo). Em produção, faça a chamada ao LLM por um **proxy** (ex.: Supabase Edge Function) que guarda a chave no servidor.
+
+## 🔒 Segurança & LGPD
+
+Medidas implementadas (detalhe completo em [`SECURITY.md`](SECURITY.md)):
+- **Senha com PBKDF2-HMAC-SHA256** (150.000 iterações + salt único); nunca armazenada em texto. Login com comparação de tempo ~constante e mensagens genéricas (anti-enumeração).
+- **Política de senha** (mín. 8, letra + número, bloqueio de senhas comuns) com **medidor de força** no cadastro.
+- **LGPD**: consentimento obrigatório e versionado, página de Privacidade transparente (cada dado + finalidade), **exportar** e **excluir** a própria conta (em "Meus dados"), minimização de dados e GPS só durante a entrega.
+- **Pronto para produção**: hashing server-side com **bcrypt** (RPC + RLS) em [`supabase/secure-auth.sql`](supabase/secure-auth.sql); roadmap de RLS por usuário com Supabase Auth.
 
 ## 🟢 Modo Supabase (backend real — já incluso)
 
