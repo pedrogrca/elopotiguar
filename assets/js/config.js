@@ -44,7 +44,19 @@ EP.config = {
     volunteer: { key: 'volunteer', label: 'Voluntário', emoji: '🙋' },
     deliverer: { key: 'deliverer', label: 'Entregador', emoji: '🛵' },
     org:       { key: 'org',       label: 'Organização', emoji: '🏛️' },
+    company:   { key: 'company',   label: 'Empresa',     emoji: '🏢' },
   },
+
+  /* Setores para contas Empresa */
+  companySectors: ['Tecnologia', 'Varejo', 'Indústria', 'Serviços', 'Saúde', 'Educação', 'Agronegócio', 'Construção', 'Financeiro', 'Outro'],
+
+  /* Selo "Empresa Cidadã ELO" — por nº de contribuições validadas */
+  companySeal: [
+    { min: 0,  label: 'Apoiadora',            color: '#9aa6a2', icon: '🌱' },
+    { min: 2,  label: 'Empresa Cidadã ELO',   color: '#0e7c66', icon: '🛡️' },
+    { min: 6,  label: 'Empresa Cidadã · Prata', color: '#5b7fd6', icon: '🥈' },
+    { min: 12, label: 'Empresa Cidadã · Ouro',  color: '#e0a32a', icon: '🥇' },
+  ],
 
   /* ---- Ciclo de vida da DOAÇÃO (ordem importa!) ------------------------ */
   /* Adicione/remova status livremente; a linha do tempo se adapta sozinha. */
@@ -70,7 +82,8 @@ EP.config = {
     receiveDonation: 5,    // ao confirmar "Recebido"
     stockDonation:   5,    // ao mover para "Em estoque"
     useDonation:     15,   // ao confirmar "Usado" (fechamento do ciclo)
-    impactPost:      25,   // ao publicar uma postagem de impacto
+    impactPost:      20,   // postagem de impacto só com texto
+    impactPostMedia: 40,   // postagem com foto/vídeo comprovando o uso (mais engajamento)
     verifiedBonus:   30,   // bônus único por verificação da organização
   },
 

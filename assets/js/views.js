@@ -133,7 +133,26 @@ EP.views = (function () {
       ]),
     ]);
 
-    return el('div', {}, [hero, priSection, how, rankSection, feedSection]);
+    var companies = EP.logic.companyRanking().slice(0, 5);
+    var companySection = companies.length ? el('section.section', {}, [
+      el('div.section__head', {}, [
+        el('h2', {}, [EP.ui.icon('briefcase', 20), el('span', { text: ' Empresas que mais apoiam' })]),
+        el('span.muted.tiny', { text: 'Selo Empresa Cidadã ELO 🛡️' }),
+      ]),
+      el('p.muted', { text: 'Empresas parceiras que transformam recursos em impacto comprovado — com Dashboard ESG e validação por código.' }),
+      el('div.ranking', {}, companies.map(function (c, i) {
+        var seal = EP.logic.companySeal(c.stats.score);
+        var nm = c.user.company ? c.user.company.name : c.user.name;
+        return el('div.ranking__row', {}, [
+          el('span.ranking__pos', { text: '#' + (i + 1) }),
+          (c.user.company && c.user.company.logo) ? el('img.brand-logo', { src: c.user.company.logo, style: { width: '38px', height: '38px' } }) : EP.ui.avatar(nm, 38),
+          el('div.ranking__name', {}, [el('strong', { text: nm }), el('div.muted.tiny', { text: '~' + c.stats.families + ' famílias impactadas' })]),
+          el('span.seal.seal--sm', { style: { background: seal.color + '18', color: seal.color, borderColor: seal.color + '55' }, text: seal.icon + ' ' + seal.label }),
+        ]);
+      })),
+    ]) : null;
+
+    return el('div', {}, [hero, priSection, how, rankSection, companySection, feedSection]);
   }
 
   function howCard(n, icon, title, text) {
@@ -188,8 +207,9 @@ EP.views = (function () {
     var posts = EP.db.postsForOrg(org.id).sort(function (a, b) { return b.createdAt - a.createdAt; });
     var tier = EP.logic.trustTier(org.trustPoints || 0);
 
-    var header = el('div.org-header.card', {}, [
-      EP.ui.avatar(org.name, 72),
+    var cover = el('div.org-cover', { style: { backgroundImage: 'url("' + (org.cover || C.brandCover(org.name)) + '")' } });
+    var header = el('div.org-header.card.org-header--cover', {}, [
+      C.orgLogo(org, 84),
       el('div.org-header__main', {}, [
         el('h1', {}, [el('span', { text: org.name }), org.verified ? el('span.verified', { title: 'Verificada', text: ' ✔' }) : null]),
         el('div.org-header__meta.muted', { text: '🏛️ ' + org.category + ' · 📍 ' + (org.location.address || org.city) }),
@@ -227,7 +247,7 @@ EP.views = (function () {
         : el('p.muted', { text: 'Ainda sem postagens.' }),
     ]);
 
-    return el('div.page', {}, [header, el('div.org-detail-grid', {}, [
+    return el('div.page', {}, [cover, header, el('div.org-detail-grid', {}, [
       el('div', {}, [needsSection, postsSection]),
       el('div', {}, [tierExplain]),
     ])]);
@@ -475,6 +495,7 @@ EP.views = (function () {
       { label: '🙋 Voluntário (Carlos)', email: 'carlos@exemplo.com' },
       { label: '🛵 Entregador (João)', email: 'joao@exemplo.com' },
       { label: '🏛️ Organização (Ana)', email: 'ana@casadobem.org' },
+      { label: '🏢 Empresa (TechNordeste)', email: 'esg@technordeste.com' },
     ];
 
     return el('div.auth-page', {}, [
@@ -513,12 +534,11 @@ EP.views = (function () {
     var roleRow = el('div.role-pick', {}, Object.keys(cfg.roles).map(function (k) {
       var r = cfg.roles[k];
       var b = el('button.role-btn', { type: 'button', onClick: function () {
-        if (k === 'org') {
-          // selecionar Organização limpa os papéis pessoais (e ao reclicar, desmarca)
-          roles = (roles.indexOf('org') >= 0) ? [] : ['org'];
+        var INST = ['org', 'company']; // contas institucionais: exclusivas entre si e dos papéis pessoais
+        if (INST.indexOf(k) >= 0) {
+          roles = (roles.indexOf(k) >= 0) ? [] : [k];
         } else {
-          // selecionar um papel pessoal sai do modo Organização
-          var oi = roles.indexOf('org'); if (oi >= 0) roles.splice(oi, 1);
+          INST.forEach(function (x) { var ix = roles.indexOf(x); if (ix >= 0) roles.splice(ix, 1); });
           var i = roles.indexOf(k); if (i >= 0) roles.splice(i, 1); else roles.push(k);
         }
         setRoleStates(); renderExtra();
@@ -534,6 +554,13 @@ EP.views = (function () {
     var orgCat = select(cfg.categories);
     var orgDesc = textarea({ placeholder: 'Descreva a missão da organização' });
     var orgVuln = select([{ value: '1', label: '1 - baixa' }, { value: '2', label: '2' }, { value: '3', label: '3 - média' }, { value: '4', label: '4' }, { value: '5', label: '5 - alta' }], '3');
+    // campos de empresa
+    var coName = input({ placeholder: 'Nome da empresa' });
+    var coSector = select(cfg.companySectors);
+    var coCnpj = input({ placeholder: 'CNPJ (opcional)' });
+    var coLogo = '';
+    var coLogoPrev = el('div.logo-pick');
+    function renderCoLogo() { EP.ui.clear(coLogoPrev); if (coLogo) coLogoPrev.appendChild(el('img.brand-logo', { src: coLogo, style: { width: '56px', height: '56px' } })); }
     var extraHost = el('div');
 
     function renderExtra() {
@@ -550,6 +577,15 @@ EP.views = (function () {
           el('h4', { text: '🏛️ Dados da organização' }),
           field('Nome', orgName), field('Categoria', orgCat), field('Descrição', orgDesc), field('Nível de vulnerabilidade do público atendido', orgVuln),
         ]));
+      }
+      if (roles.indexOf('company') >= 0) {
+        extraHost.appendChild(el('div.card.subcard', {}, [
+          el('h4', { text: '🏢 Dados da empresa' }),
+          el('p.muted.tiny', { text: 'Conta corporativa com Dashboard ESG e Selo "Empresa Cidadã ELO".' }),
+          field('Nome da empresa', coName), field('Setor', coSector), field('CNPJ', coCnpj),
+          field('Logo (opcional)', el('div', {}, [coLogoPrev, el('button.btn.btn--sm.btn--ghost', { type: 'button', onClick: function () { EP.ui.pickImage(function (d) { coLogo = d; renderCoLogo(); }, { maxDim: 400 }); } }, [EP.ui.icon('image', 16), el('span', { text: ' Enviar logo' })])])),
+        ]));
+        renderCoLogo();
       }
     }
     renderExtra();
@@ -591,6 +627,10 @@ EP.views = (function () {
           if (!orgName.value.trim()) throw new Error('Informe o nome da organização.');
           data.org = { name: orgName.value.trim(), category: orgCat.value, description: orgDesc.value, vulnerability: orgVuln.value, city: cityIn.value.trim() };
         }
+        if (roles.indexOf('company') >= 0) {
+          if (!coName.value.trim()) throw new Error('Informe o nome da empresa.');
+          data.company = { name: coName.value.trim(), sector: coSector.value, cnpj: coCnpj.value.trim(), logo: coLogo };
+        }
         await EP.auth.register(data);
         EP.ui.toast('Conta criada! Bem-vindo(a) ao ' + cfg.app.name + ' 🎉', 'success');
         EP.app.go('#/painel');
@@ -600,7 +640,7 @@ EP.views = (function () {
     return el('div.auth-page', {}, [
       el('div.card.auth-card.auth-card--wide', {}, [
         el('h1', { text: 'Criar conta' }),
-        el('p.muted', { text: 'Conta de pessoa: combine Doador, Voluntário e Entregador. "Organização" é um tipo de conta à parte.' }),
+        el('p.muted', { text: 'Pessoa: combine Doador, Voluntário e Entregador. "Organização" e "Empresa" são tipos de conta à parte.' }),
         el('div.form-grid', {}, [field('Nome', nameIn), field('Cidade', cityIn), field('E-mail', emailIn), field('Senha', passIn)]),
         pwMeter,
         field('Eu quero participar como:', roleRow),
@@ -634,6 +674,7 @@ EP.views = (function () {
     else if (tab === 'org') content = orgPanel(user);
     else if (tab === 'volunteer') content = volunteerPanel(user);
     else if (tab === 'deliverer') content = delivererPanel(user);
+    else if (tab === 'company') content = companyPanel(user);
     else content = el('div');
 
     return el('div.page', {}, [
@@ -662,6 +703,61 @@ EP.views = (function () {
         el('div.grid.grid--3', {}, rec.map(function (p) { return C.orgCard(p.org); })),
       ]),
     ]);
+  }
+
+  /* ---- Painel da EMPRESA (Dashboard ESG) ------------------------------- */
+  function companyPanel(user) {
+    var co = user.company || { name: user.name, sector: '' };
+    var s = EP.logic.companyStats(user.id);
+    var seal = EP.logic.companySeal(s.score);
+    var next = cfg.companySeal.filter(function (t) { return t.min > s.score; })[0];
+
+    var header = el('div.card.esg-header', {}, [
+      co.logo ? el('img.brand-logo', { src: co.logo, style: { width: '64px', height: '64px' } }) : EP.ui.avatar(co.name, 64),
+      el('div.esg-header__main', {}, [
+        el('h2', { text: co.name }),
+        el('div.muted', { text: '🏢 ' + (co.sector || 'Empresa') + (co.cnpj ? ' · ' + co.cnpj : '') }),
+        el('span.seal', { style: { background: seal.color + '18', color: seal.color, borderColor: seal.color + '55' } }, [el('span', { text: seal.icon + ' ' }), el('strong', { text: 'Selo ' + seal.label })]),
+      ]),
+      el('a.btn.btn--primary', { href: '#/organizacoes' }, [EP.ui.icon('gift', 18), el('span', { text: ' Nova doação' })]),
+    ]);
+
+    var highlight = el('div.card.esg-highlight', {}, [
+      EP.ui.icon('shield', 28),
+      el('div', {}, [
+        el('strong', { text: 'Sua empresa impactou cerca de ' + s.families + ' famílias' + (s.validated ? ' — com ' + s.validated + ' entrega(s) validada(s) por código ✅' : '') + '.' }),
+        el('div.muted.tiny', { text: 'Impacto comprovado e rastreável: cada doação é confirmada etapa a etapa pelas organizações.' }),
+      ]),
+    ]);
+
+    var metrics = el('div.esg-metrics', {}, [
+      C.statCard(s.families, 'Famílias impactadas', '👨‍👩‍👧'),
+      C.statCard(cfg.currency(s.totalFinancial), 'Total doado', '💰'),
+      C.statCard(s.validated, 'Entregas validadas', '✅'),
+      C.statCard(s.orgs, 'Organizações apoiadas', '🏛️'),
+      C.statCard(s.donations, 'Contribuições', '📦'),
+    ]);
+
+    var sealCard = el('div.card', {}, [
+      el('h3', { text: seal.icon + ' Selo Empresa Cidadã ELO' }),
+      el('p.muted', { text: 'Nível atual: ' + seal.label + '. ' + (next ? 'Faltam ' + (next.min - s.score) + ' contribuição(ões) para "' + next.label + '".' : 'Nível máximo alcançado! 🏆') }),
+      el('div.seal-track', {}, cfg.companySeal.map(function (t) {
+        return el('div.seal-step', { class: s.score >= t.min ? 'is-on' : '', style: { color: t.color } }, [el('span', { text: t.icon }), el('span.tiny', { text: t.label }), el('span.tiny.muted', { text: t.min + '+' })]);
+      })),
+    ]);
+    var causes = Object.keys(s.causes);
+    var causesCard = el('div.card', {}, [
+      el('h3', { text: 'Causas que você apoia' }),
+      causes.length ? el('div.chips', {}, causes.map(function (c) { return EP.ui.chip(c + ' · ' + s.causes[c]); })) : el('p.muted', { text: 'Apoie sua primeira causa.' }),
+    ]);
+
+    var contrib = el('section.section', {}, [
+      el('h3', { text: 'Minhas contribuições (' + s.donations + ')' }),
+      s.list.length ? el('div.list', {}, s.list.slice().sort(function (a, b) { return b.createdAt - a.createdAt; }).map(function (d) { return C.donationRow(d); }))
+        : el('p.empty', { text: 'Sua empresa ainda não doou. Comece agora e construa seu Selo Cidadão! 💚' }),
+    ]);
+
+    return el('div', {}, [header, highlight, metrics, el('div.esg-grid', {}, [sealCard, causesCard]), contrib]);
   }
 
   /* ---- Painel da ORGANIZAÇÃO -------------------------------------------- */
@@ -694,15 +790,38 @@ EP.views = (function () {
 
     return el('div', {}, [
       el('div.card.org-summary', {}, [
-        EP.ui.avatar(org.name, 56),
+        C.orgLogo(org, 56),
         el('div.org-summary__main', {}, [
           el('h2', {}, [el('span', { text: org.name }), org.verified ? el('span.verified', { text: ' ✔' }) : null]),
           el('div.muted', { text: org.category + ' · ' + org.city }),
         ]),
-        el('div.org-summary__trust', {}, [C.trustBadge(org), el('a.link.tiny', { href: '#/org/' + org.id, text: 'ver página pública →' })]),
+        el('div.org-summary__trust', {}, [
+          C.trustBadge(org),
+          el('button.btn.btn--sm.btn--ghost', { onClick: function () { editIdentity(org); } }, [EP.ui.icon('image', 15), el('span', { text: ' Identidade' })]),
+          el('a.link.tiny', { href: '#/org/' + org.id, text: 'ver página pública →' }),
+        ]),
       ]),
       sub, body,
     ]);
+  }
+
+  function editIdentity(org) {
+    var logo = org.logo || '', cover = org.cover || '';
+    var logoPrev = el('div.logo-pick'), coverPrev = el('div.cover-pick');
+    function rl() { EP.ui.clear(logoPrev); logoPrev.appendChild(el('img.brand-logo', { src: logo || C.brandLogo(org.name, org.name), style: { width: '64px', height: '64px' } })); }
+    function rc() { EP.ui.clear(coverPrev); coverPrev.appendChild(el('div.cover-prevbox', { style: { backgroundImage: 'url("' + (cover || C.brandCover(org.name)) + '")' } })); }
+    rl(); rc();
+    EP.ui.modal({
+      title: '🎨 Identidade da organização',
+      body: el('div.form', {}, [
+        field('Logo', el('div', {}, [logoPrev, el('button.btn.btn--sm.btn--ghost', { type: 'button', onClick: function () { EP.ui.pickImage(function (d) { logo = d; rl(); }, { maxDim: 400 }); } }, [EP.ui.icon('image', 16), el('span', { text: ' Enviar logo' })])])),
+        field('Imagem de fundo (capa)', el('div', {}, [coverPrev, el('button.btn.btn--sm.btn--ghost', { type: 'button', onClick: function () { EP.ui.pickImage(function (d) { cover = d; rc(); }, { maxDim: 1400 }); } }, [EP.ui.icon('image', 16), el('span', { text: ' Enviar capa' })])])),
+      ]),
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Salvar', kind: 'primary', onClick: function () { EP.db.update('organizations', org.id, { logo: logo, cover: cover }); EP.ui.toast('Identidade atualizada! 🎨', 'success'); EP.app.render(); } },
+      ],
+    });
   }
 
   function orgNeeds(org) {
@@ -821,7 +940,7 @@ EP.views = (function () {
     var wrap = el('div');
     wrap.appendChild(el('div.section__head', {}, [
       el('h3', { text: 'Postagens de impacto' }),
-      el('button.btn.btn--sm.btn--accent', { text: '+ Nova postagem (+' + cfg.points.impactPost + ' pts)', onClick: function () { postForm(org, null); } }),
+      el('button.btn.btn--sm.btn--accent', { text: '+ Nova postagem (até +' + cfg.points.impactPostMedia + ' pts)', onClick: function () { postForm(org, null); } }),
     ]));
     wrap.appendChild(posts.length ? el('div.grid.grid--2', {}, posts.map(function (p) { return C.postCard(p); })) : el('p.muted', { text: 'Compartilhe o impacto das doações para ganhar pontos de confiança!' }));
     return wrap;
@@ -830,21 +949,46 @@ EP.views = (function () {
   function postForm(org, donation) {
     var titleIn = input({ placeholder: 'Ex.: 20 famílias alimentadas esta semana' });
     var bodyIn = textarea({ rows: 4, placeholder: 'Conte o que foi feito com as doações...' });
-    var emojiIn = input({ value: '💚', placeholder: 'Emoji' });
+    var videoIn = input({ placeholder: 'Link de vídeo (YouTube ou .mp4) — opcional' });
+    var images = [];
+    var thumbs = el('div.media-thumbs');
+    var ptsHint = el('p.points-hint');
+
+    function refresh() {
+      EP.ui.clear(thumbs);
+      images.forEach(function (src, i) {
+        thumbs.appendChild(el('div.media-thumb', {}, [el('img', { src: src }), el('button.media-thumb__x', { html: '&times;', onClick: function () { images.splice(i, 1); refresh(); } })]));
+      });
+      var hasMedia = images.length || videoIn.value.trim();
+      ptsHint.textContent = hasMedia
+        ? '📸 Com mídia comprovando o uso: +' + cfg.points.impactPostMedia + ' pts (gera mais engajamento!)'
+        : 'Só texto: +' + cfg.points.impactPost + ' pts. Anexe foto/vídeo e ganhe +' + cfg.points.impactPostMedia + '.';
+      ptsHint.style.color = hasMedia ? cfg.theme.primary : cfg.theme.muted;
+    }
+    videoIn.addEventListener('input', refresh);
+    var addBtn = el('button.btn.btn--sm.btn--ghost', { type: 'button', onClick: function () { EP.ui.pickImage(function (d) { images.push(d); refresh(); }); } }, [EP.ui.icon('camera', 16), el('span', { text: ' Adicionar foto' })]);
     var orgDonations = EP.db.donationsForOrg(org.id);
     var linkSel = select([{ value: '', label: '— nenhuma —' }].concat(orgDonations.map(function (d) {
       return { value: d.id, label: (d.type === 'financial' ? cfg.currency(d.amount) : d.description) + ' (' + d.status + ')' };
     })), donation ? donation.id : '');
+    refresh();
 
     EP.ui.modal({
       title: '📣 Publicar impacto',
-      body: el('div.form', {}, [field('Título', titleIn), field('Mensagem', bodyIn), field('Emoji', emojiIn), field('Vincular a uma doação (opcional)', linkSel)]),
+      body: el('div.form', {}, [
+        field('Título', titleIn), field('Mensagem', bodyIn),
+        field('Fotos (comprovam o uso)', el('div', {}, [thumbs, addBtn])),
+        field('Vídeo (opcional)', videoIn),
+        field('Vincular a uma doação (opcional)', linkSel),
+        ptsHint,
+      ]),
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Publicar (+' + cfg.points.impactPost + ' pts)', kind: 'accent', onClick: function () {
+        { label: 'Publicar', kind: 'accent', onClick: function () {
           if (!titleIn.value.trim() || !bodyIn.value.trim()) { EP.ui.toast('Preencha título e mensagem.', 'danger'); return false; }
-          EP.logic.createPost(org.id, { title: titleIn.value.trim(), body: bodyIn.value.trim(), image: emojiIn.value || '📣', donationId: linkSel.value || null });
-          EP.ui.toast('Postagem publicada! +' + cfg.points.impactPost + ' pts 🏆', 'success');
+          var hasMedia = images.length || videoIn.value.trim();
+          EP.logic.createPost(org.id, { title: titleIn.value.trim(), body: bodyIn.value.trim(), images: images, video: videoIn.value.trim(), donationId: linkSel.value || null });
+          EP.ui.toast('Postagem publicada! +' + (hasMedia ? cfg.points.impactPostMedia : cfg.points.impactPost) + ' pts 🏆', 'success');
           EP.app.render();
         } },
       ],

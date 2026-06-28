@@ -6,6 +6,29 @@ window.EP = window.EP || {};
 EP.components = (function () {
   var el = EP.ui.el, esc = EP.ui.esc;
 
+  /* ---- Marca gerada (logo/capa de exemplo via SVG data-url) ------------ */
+  function svgUrl(svg) { return 'data:image/svg+xml,' + encodeURIComponent(svg); }
+  function hueOf(seed) { var h = 0; seed = String(seed || ''); for (var i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360; return h; }
+  function brandLogo(seed, text) {
+    var h = hueOf(seed), h2 = (h + 40) % 360, t = esc((text || '?').slice(0, 2).toUpperCase());
+    return svgUrl('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(' + h + ',60%,46%)"/><stop offset="1" stop-color="hsl(' + h2 + ',62%,36%)"/></linearGradient></defs><rect width="160" height="160" rx="36" fill="url(#g)"/><text x="80" y="100" font-family="Arial,Helvetica,sans-serif" font-size="62" font-weight="700" fill="#fff" text-anchor="middle">' + t + '</text></svg>');
+  }
+  function brandCover(seed) {
+    var h = hueOf(seed), h2 = (h + 50) % 360;
+    return svgUrl('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(' + h + ',55%,42%)"/><stop offset="1" stop-color="hsl(' + h2 + ',58%,28%)"/></linearGradient></defs><rect width="1200" height="360" fill="url(#g)"/><circle cx="980" cy="80" r="220" fill="rgba(255,255,255,0.07)"/><circle cx="1090" cy="300" r="150" fill="rgba(255,255,255,0.06)"/><circle cx="160" cy="330" r="200" fill="rgba(0,0,0,0.06)"/></svg>');
+  }
+  // <img> do logo (ou avatar com iniciais se não houver)
+  function orgLogo(org, size) {
+    size = size || 46;
+    var src = org.logo || brandLogo(org.name, org.name);
+    return el('img.brand-logo', { src: src, alt: org.name, style: { width: size + 'px', height: size + 'px' } });
+  }
+  function sealTier(score) {
+    var t = EP.config.companySeal[0];
+    EP.config.companySeal.forEach(function (s) { if (score >= s.min) t = s; });
+    return t;
+  }
+
   /* ---- Selo de confiança ----------------------------------------------- */
   function trustBadge(org) {
     var tier = EP.logic.trustTier(org.trustPoints || 0);
@@ -33,7 +56,7 @@ EP.components = (function () {
     var needs = EP.db.needsOfOrg(org.id).filter(function (n) { return n.status === 'open'; });
     var card = el('div.card.org-card', { onClick: function () { EP.app.go('#/org/' + org.id); } }, [
       el('div.org-card__top', {}, [
-        EP.ui.avatar(org.name, 46),
+        orgLogo(org, 46),
         el('div.org-card__id', {}, [
           el('div.org-card__name', {}, [
             el('span', { text: org.name }),
@@ -130,30 +153,54 @@ EP.components = (function () {
   }
 
   /* ---- Cartão de postagem de impacto ----------------------------------- */
+  function videoEmbed(url) {
+    var yt = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/);
+    if (yt) return el('div.post-video', {}, [el('iframe', { src: 'https://www.youtube.com/embed/' + yt[1], allow: 'fullscreen', allowfullscreen: '', frameborder: '0' })]);
+    return el('video.post-video', { src: url, controls: '', preload: 'metadata' });
+  }
+  function postMedia(post) {
+    var imgs = post.images || [];
+    var blocks = [];
+    if (imgs.length) {
+      blocks.push(el('div.post-media', { class: 'post-media--' + Math.min(imgs.length, 3) }, imgs.slice(0, 4).map(function (src, i) {
+        return el('div.post-media__cell', { onClick: function () { lightbox(src); } }, [el('img', { src: src, alt: 'foto' }),
+          (i === 3 && imgs.length > 4) ? el('span.post-media__more', { text: '+' + (imgs.length - 4) }) : null]);
+      })));
+    }
+    if (post.video) blocks.push(videoEmbed(post.video));
+    return blocks.length ? el('div', {}, blocks) : null;
+  }
+  function lightbox(src) {
+    var ov = el('div.lightbox', { onClick: function () { ov.remove(); } }, [el('img', { src: src })]);
+    document.body.appendChild(ov);
+  }
+
   function postCard(post, opts) {
     opts = opts || {};
     var org = EP.db.orgById(post.orgId);
+    var hasMedia = (post.images && post.images.length) || post.video;
     return el('div.card.post-card', {}, [
       el('div.post-card__head', {}, [
-        EP.ui.avatar(org ? org.name : '?', 40),
-        el('div', {}, [
+        org ? orgLogo(org, 40) : EP.ui.avatar('?', 40),
+        el('div.post-card__hid', {}, [
           el('div.post-card__org', {}, [
             el('strong', { text: org ? org.name : '—' }),
             org && org.verified ? el('span.verified', { text: ' ✔' }) : null,
           ]),
           el('div.post-card__time.muted', { text: EP.ui.timeAgo(post.createdAt) }),
         ]),
-        el('div.post-card__emoji', { text: post.image || '📣' }),
+        hasMedia ? el('span.badge.badge--media', { html: '', style: { background: '#0e7c6618', color: '#0e7c66', borderColor: '#0e7c6655' }, text: (post.video ? '🎬' : '📸') + ' comprovado' }) : null,
       ]),
       el('h3.post-card__title', { text: post.title }),
       el('p.post-card__body', { text: post.body }),
-      post.donationId ? el('div.post-card__link.muted', { text: '🔗 vinculada a uma doação recebida' }) : null,
+      postMedia(post),
+      post.donationId ? el('div.post-card__link.muted', {}, [EP.ui.icon('check', 14), el('span', { text: ' vinculada a uma doação recebida' })]) : null,
       el('div.post-card__foot', {}, [
         el('button.like-btn', { html: '❤ <span>' + post.likes + '</span>', onClick: function () {
           EP.db.update('posts', post.id, { likes: (post.likes || 0) + 1 });
           EP.ui.toast('Obrigado pelo apoio!', 'success'); EP.app.render();
         } }),
-        el('span.muted.tiny', { text: '+' + EP.config.points.impactPost + ' pts de confiança' }),
+        el('span.muted.tiny', { text: '+' + (hasMedia ? EP.config.points.impactPostMedia : EP.config.points.impactPost) + ' pts' }),
       ]),
     ]);
   }
@@ -291,5 +338,6 @@ EP.components = (function () {
     trustBadge: trustBadge, vulnerabilityBar: vulnerabilityBar, statusPill: statusPill,
     orgCard: orgCard, needCard: needCard, statusTimeline: statusTimeline,
     donationRow: donationRow, postCard: postCard, statCard: statCard, GpsMap: GpsMap,
+    brandLogo: brandLogo, brandCover: brandCover, orgLogo: orgLogo, sealTier: sealTier, postMedia: postMedia,
   };
 })();

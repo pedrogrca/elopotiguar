@@ -145,6 +145,11 @@ EP.auth = (function () {
       user.orgId = org.id;
     }
 
+    if (roles.indexOf('company') >= 0 && data.company) {
+      user.company = { name: data.company.name || user.name, sector: data.company.sector || '', cnpj: data.company.cnpj || '', logo: data.company.logo || '' };
+      EP.db.update('users', user.id, { company: user.company });
+    }
+
     setSession(user.id);
     return user;
   }

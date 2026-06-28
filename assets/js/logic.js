@@ -199,11 +199,13 @@ EP.logic = (function () {
 
   /* ===================== POSTAGENS DE IMPACTO =========================== */
   function createPost(orgId, data) {
+    var hasMedia = !!((data.images && data.images.length) || data.video);
     var post = EP.db.insert('posts', {
       orgId: orgId, donationId: data.donationId || null,
-      title: data.title, body: data.body, image: data.image || '📣', likes: 0,
+      title: data.title, body: data.body, image: data.image || '📣',
+      images: data.images || [], video: data.video || '', likes: 0,
     });
-    awardPoints(orgId, C.points.impactPost, 'Postagem de impacto', post.id);
+    awardPoints(orgId, hasMedia ? C.points.impactPostMedia : C.points.impactPost, hasMedia ? 'Postagem com mídia (comprovação)' : 'Postagem de impacto', post.id);
     if (post.donationId) {
       var linked = EP.db.get('donations', post.donationId);
       var org = EP.db.orgById(orgId);
@@ -349,6 +351,31 @@ EP.logic = (function () {
     }).sort(function (a, b) { return b.priority - a.priority; });
   }
 
+  /* ===================== EMPRESAS / ESG =============================== */
+  function companyStats(userId) {
+    var dons = EP.db.query('donations', function (d) { return d.donorId === userId; });
+    var total = dons.filter(function (d) { return d.type === 'financial'; }).reduce(function (s, d) { return s + (d.amount || 0); }, 0);
+    var families = 0;
+    dons.forEach(function (d) {
+      if (d.type === 'financial') families += Math.round((d.amount || 0) / 50);
+      else (d.items || []).forEach(function (it) { families += (Number(it.qty) || 0); });
+    });
+    var validated = dons.filter(function (d) { if (!d.delivery) return false; var del = EP.db.get('deliveries', d.delivery); return del && del.status === 'Entregue'; }).length;
+    var orgs = {}, causes = {};
+    dons.forEach(function (d) { orgs[d.orgId] = 1; var o = EP.db.orgById(d.orgId); if (o) causes[o.category] = (causes[o.category] || 0) + 1; });
+    return { donations: dons.length, totalFinancial: total, families: families, validated: validated, orgs: Object.keys(orgs).length, causes: causes, score: dons.length, list: dons };
+  }
+  function companySeal(score) {
+    var t = C.companySeal[0];
+    C.companySeal.forEach(function (s) { if (score >= s.min) t = s; });
+    return t;
+  }
+  function companyRanking() {
+    return EP.db.query('users', function (u) { return (u.roles || []).indexOf('company') >= 0; })
+      .map(function (u) { return { user: u, stats: companyStats(u.id) }; })
+      .sort(function (a, b) { return (b.stats.families - a.stats.families) || (b.stats.donations - a.stats.donations); });
+  }
+
   /* ===================== ESTATÍSTICAS ================================== */
   function globalStats() {
     var dons = EP.db.all('donations');
@@ -379,5 +406,7 @@ EP.logic = (function () {
     applicationsForVolunteer: applicationsForVolunteer, respondApplication: respondApplication,
     // alocação financeira
     addAllocation: addAllocation, allocationSummary: allocationSummary,
+    // empresas / ESG
+    companyStats: companyStats, companySeal: companySeal, companyRanking: companyRanking,
   };
 })();

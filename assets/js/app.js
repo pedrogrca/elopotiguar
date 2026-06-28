@@ -7,6 +7,7 @@ EP.app = (function () {
   var el = EP.ui.el;
   var viewRoot, headerRoot;
   var cleanups = [];
+  var lastHash = null;   // só rola para o topo quando a rota muda (não em re-render no mesmo lugar)
 
   /* ---- Gestão de limpeza (intervals, GPS, listeners) ------------------- */
   function onCleanup(fn) { if (typeof fn === 'function') cleanups.push(fn); }
@@ -65,7 +66,7 @@ EP.app = (function () {
     viewRoot.appendChild(node);
     renderHeader();
     setActiveNav(route.path);
-    window.scrollTo(0, 0);
+    if (location.hash !== lastHash) { window.scrollTo(0, 0); lastHash = location.hash; }
   }
 
   /* ---- Cabeçalho -------------------------------------------------------- */
@@ -74,15 +75,15 @@ EP.app = (function () {
     var user = EP.auth.currentUser();
 
     var nav = el('nav.nav', {}, [
-      navLink('#/', '🏠 Início'),
-      navLink('#/organizacoes', '🏛️ Organizações'),
-      navLink('#/impacto', '💚 Impacto'),
+      navLink('#/', 'home', 'Início'),
+      navLink('#/organizacoes', 'building', 'Organizações'),
+      navLink('#/impacto', 'heart', 'Impacto'),
     ]);
 
     var right;
     if (user) {
       right = el('div.header__right', {}, [
-        el('button.btn.btn--sm.btn--primary', { text: '＋ Doar', onClick: function () { go('#/organizacoes'); } }),
+        el('button.btn.btn--sm.btn--primary', { onClick: function () { go('#/organizacoes'); } }, [EP.ui.icon('gift', 18), el('span', { text: 'Doar' })]),
         notifBell(user),
         userMenu(user),
       ]);
@@ -104,8 +105,8 @@ EP.app = (function () {
     ]));
   }
 
-  function navLink(href, label) {
-    return el('a.nav__link', { href: href, 'data-path': href, text: label });
+  function navLink(href, iconName, label) {
+    return el('a.nav__link', { href: href, 'data-path': href }, [EP.ui.icon(iconName, 18), el('span', { text: label })]);
   }
 
   function setActiveNav(path) {
@@ -126,7 +127,7 @@ EP.app = (function () {
       if (willOpen) { buildNotifList(list, user); }
       list.classList.toggle('menu--hidden');
       if (willOpen) EP.logic.markAllRead(user.id); // zera o contador ao abrir
-    } }, ['🔔', badge]);
+    } }, [EP.ui.icon('bell', 20), badge]);
     document.addEventListener('click', function () { list.classList.add('menu--hidden'); });
     return el('div.menu-wrap', {}, [btn, list]);
   }

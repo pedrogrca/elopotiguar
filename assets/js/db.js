@@ -183,6 +183,11 @@ EP.db = (function () {
       description: 'Abrigo e cuidados para idosos sem suporte familiar.',
       vulnerability: 4, verified: true, location: { lat: -5.770, lng: -35.230, address: 'Rua da Saudade, 88 — Petrópolis, Natal/RN' } });
 
+    // Logo e capa de exemplo (a organização pode trocar no painel)
+    [org1, org2, org3, org4].forEach(function (o) {
+      if (EP.components) { o.logo = EP.components.brandLogo(o.name, o.name); o.cover = EP.components.brandCover(o.name); }
+    });
+
     /* ---- Usuários ---- */
     var ana = U({ name: 'Ana Ferreira', email: 'ana@casadobem.org', roles: ['org'], orgId: org1.id, location: { city: 'Natal' } });
     var bruno = U({ name: 'Bruno Alves', email: 'bruno@maos.org', roles: ['org'], orgId: org2.id, location: { city: 'Natal' } });
@@ -196,6 +201,16 @@ EP.db = (function () {
     var joao = U({ name: 'João Mota', email: 'joao@exemplo.com', roles: ['deliverer', 'volunteer'],
       skills: ['Transporte', 'Carpintaria'], interests: ['Alimentação'], availability: 'Tardes',
       bio: 'Tenho moto e tempo livre para ajudar nas entregas.', location: { city: 'Natal', lat: -5.80, lng: -35.21 } });
+
+    /* ---- Empresas (contas corporativas) ---- */
+    function CO(name, sector, email) {
+      return U({ name: name, email: email, roles: ['company'],
+        company: { name: name, sector: sector, cnpj: '00.000.000/0001-00', logo: EP.components ? EP.components.brandLogo(name, name) : '' },
+        location: { city: 'Natal' } });
+    }
+    var tech = CO('TechNordeste', 'Tecnologia', 'esg@technordeste.com');
+    var merc = CO('Mercado Potiguar', 'Varejo', 'esg@mercadopotiguar.com');
+    var cons = CO('Construtora Sol', 'Construção', 'esg@construtorasol.com');
 
     /* ---- Necessidades ---- */
     var n1 = N({ orgId: org1.id, title: '300 cestas básicas', type: 'material', category: 'Alimentação',
@@ -258,11 +273,29 @@ EP.db = (function () {
     state.deliveries.push(del);
     d4.delivery = del.id;
 
-    /* ---- Postagem de impacto (liga a doação usada) ---- */
+    /* ---- Doações de EMPRESAS (ranking + dashboard ESG) ---- */
+    var cd1 = D({ donorId: tech.id, orgId: org1.id, needId: n1.id, type: 'material', description: '500 cestas básicas', items: [{ name: 'Cesta básica', qty: 500, unit: 'un' }], needsDelivery: false, createdAt: now - 20 * DAY });
+    step(cd1, 'Pendente', now - 20 * DAY, tech.id); step(cd1, 'Recebido', now - 19 * DAY, ana.id); step(cd1, 'Em estoque', now - 19 * DAY + 3600000, ana.id); step(cd1, 'Usado', now - 15 * DAY, ana.id, 'Distribuídas para 500 famílias.');
+    var cd2 = D({ donorId: tech.id, orgId: org2.id, needId: null, type: 'financial', description: 'Patrocínio educacional', amount: 5000, needsDelivery: false, createdAt: now - 10 * DAY });
+    step(cd2, 'Pendente', now - 10 * DAY, tech.id); step(cd2, 'Recebido', now - 10 * DAY + 1800000, bruno.id);
+    var cd3 = D({ donorId: tech.id, orgId: org1.id, needId: n1.id, type: 'material', description: '80 cobertores', items: [{ name: 'Cobertor', qty: 80, unit: 'un' }], needsDelivery: true, pickup: { lat: -5.82, lng: -35.21, address: 'Sede TechNordeste — Natal/RN' }, createdAt: now - 3 * DAY });
+    step(cd3, 'Pendente', now - 3 * DAY, tech.id); step(cd3, 'Em rota', now - 3 * DAY + 3600000, joao.id); step(cd3, 'Recebido', now - 2 * DAY, joao.id, 'Entrega validada por código.');
+    var crt = buildRoute(cd3.pickup, org1.location, 24);
+    state.deliveries.push({ id: id('del'), donationId: cd3.id, donorId: tech.id, orgId: org1.id, delivererId: joao.id, status: 'Entregue', pickupCode: '1234', dropoffCode: '5678', pickup: cd3.pickup, dropoff: { lat: org1.location.lat, lng: org1.location.lng, address: org1.location.address }, route: crt, routeIndex: crt.length - 1, delivererLocation: { lat: org1.location.lat, lng: org1.location.lng, at: now - 2 * DAY }, createdAt: now - 3 * DAY, acceptedAt: now - 3 * DAY + 1800000, collectedAt: now - 3 * DAY + 3600000, deliveredAt: now - 2 * DAY });
+    cd3.delivery = state.deliveries[state.deliveries.length - 1].id;
+
+    var md1 = D({ donorId: merc.id, orgId: org1.id, needId: n1.id, type: 'material', description: '150 cestas básicas', items: [{ name: 'Cesta básica', qty: 150, unit: 'un' }], needsDelivery: false, createdAt: now - 8 * DAY });
+    step(md1, 'Pendente', now - 8 * DAY, merc.id); step(md1, 'Recebido', now - 7 * DAY, ana.id); step(md1, 'Em estoque', now - 7 * DAY + 3600000, ana.id);
+    var md2 = D({ donorId: merc.id, orgId: org4.id, needId: null, type: 'financial', description: 'Apoio aos idosos', amount: 1500, needsDelivery: false, createdAt: now - 5 * DAY });
+    step(md2, 'Pendente', now - 5 * DAY, merc.id); step(md2, 'Recebido', now - 5 * DAY + 1800000, null);
+    var sd1 = D({ donorId: cons.id, orgId: org4.id, needId: null, type: 'financial', description: 'Reforma do telhado', amount: 800, needsDelivery: false, createdAt: now - 6 * DAY });
+    step(sd1, 'Pendente', now - 6 * DAY, cons.id); step(sd1, 'Recebido', now - 6 * DAY + 1800000, null);
+
+    /* ---- Postagem de impacto (liga a doação usada) — com MÍDIA ---- */
     state.posts.push({ id: id('pos'), orgId: org1.id, donationId: d1.id,
       title: '20 famílias alimentadas nesta semana 💚',
       body: 'Graças às cestas básicas doadas, conseguimos atender 20 famílias do bairro Cidade Alta. Cada cesta vira um mês de tranquilidade na mesa de quem mais precisa. Gratidão a todos os doadores!',
-      image: '🍲', likes: 14, createdAt: now - 4 * DAY });
+      image: '🍲', images: EP.components ? [EP.components.brandCover('foto-entrega-1'), EP.components.brandCover('foto-entrega-2')] : [], video: '', likes: 32, createdAt: now - 4 * DAY });
     state.posts.push({ id: id('pos'), orgId: org2.id, donationId: null,
       title: 'Volta às aulas com dignidade ✏️',
       body: 'Estamos montando os kits escolares para a criançada. Ainda precisamos de mais doações para alcançar as 80 crianças!',
@@ -275,7 +308,7 @@ EP.db = (function () {
     P(org1.id, C.receiveDonation, 'Recebimento confirmado');
     P(org1.id, C.stockDonation, 'Item em estoque');
     P(org1.id, C.useDonation, 'Recurso utilizado');
-    P(org1.id, C.impactPost, 'Postagem de impacto');
+    P(org1.id, C.impactPostMedia, 'Postagem com mídia (comprovação)');
     P(org2.id, C.verifiedBonus, 'Organização verificada');
     P(org2.id, C.receiveDonation, 'Recebimento confirmado');
     P(org2.id, C.stockDonation, 'Item em estoque');
