@@ -126,6 +126,16 @@ EP.config = {
     gpsUpdateMs: 1200,   // intervalo de atualização do GPS simulado
   },
 
+  /* ---- Backend ---------------------------------------------------------- */
+  /* mode 'local'    => dados no navegador (localStorage), sem servidor.      */
+  /* mode 'supabase' => backend real: Postgres + Realtime (multi-dispositivo).*/
+  /* Para voltar ao modo offline, troque mode para 'local'.                  */
+  backend: {
+    mode: 'supabase',
+    url: 'https://cszhalwpzrpbqwxmhgqt.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzemhhbHdwenJwYnF3eG1oZ3F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1OTM0ODgsImV4cCI6MjA5ODE2OTQ4OH0.-1IjvVm24umM9Hdz8ePWb2pEIclLz5nCW-nrPsuJKWg',
+  },
+
   /* ---- Geral ------------------------------------------------------------ */
   currency: (n) => 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   storageKey: 'elo_potiguar_db_v1',

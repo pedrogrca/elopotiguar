@@ -26,9 +26,13 @@ EP.db = (function () {
     counters: {},
   };
 
+  var seeding = false;   // true durante a semeadura (ids determinísticos: org_1, use_1...)
+  function supaMode() { return !!(EP.config.backend && EP.config.backend.mode === 'supabase'); }
+
   /* ---- Persistência ----------------------------------------------------- */
   function load() {
     if (state) return state;
+    if (supaMode()) { state = clone(EMPTY); return state; } // o boot injeta o estado real via setState()
     try {
       var raw = localStorage.getItem(KEY);
       state = raw ? JSON.parse(raw) : null;
@@ -39,23 +43,70 @@ EP.db = (function () {
     return state;
   }
 
+  // Injeta o estado vindo do backend (modo supabase).
+  function setState(obj) {
+    state = obj || clone(EMPTY);
+    Object.keys(EMPTY).forEach(function (k) { if (state[k] == null) state[k] = clone(EMPTY[k]); });
+    return state;
+  }
+
   function save() {
+    if (supaMode()) return state;   // no modo supabase persiste-se por registro (ver persistOp)
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { console.error('Falha ao salvar', e); }
     return state;
   }
 
+  // Envia UM registro ao backend (somente modo supabase).
+  function persistOp(coll, op, payload) {
+    if (supaMode() && EP.supa) EP.supa.push(coll, op, payload);
+  }
+
+  // Salva o cache + envia ao backend o objeto que você mutou diretamente.
+  // Use após mutar um objeto obtido por get() (em vez de chamar save() direto).
+  function touch(coll, obj) { save(); persistOp(coll, 'upsert', obj); return obj; }
+
+  // Aplica no cache uma mudança recebida via Realtime (NÃO reenvia ao servidor).
+  function mergeRemote(coll, op, payload) {
+    var s = load();
+    var arr = s[coll] || (s[coll] = []);
+    var idx = arr.findIndex(function (x) { return x.id === payload.id; });
+    if (op === 'delete') { if (idx >= 0) arr.splice(idx, 1); }
+    else { if (idx >= 0) arr[idx] = payload; else arr.push(payload); }
+  }
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  // Constrói um estado novo já semeado, sem tocar no estado atual.
+  function buildSeedState() {
+    var prev = state;
+    state = clone(EMPTY);
+    seeding = true;
+    try { seed(); } finally { seeding = false; }
+    var built = state;
+    state = prev;
+    return built;
+  }
+
   function reset(reseed) {
+    if (supaMode()) {
+      var fresh = (reseed === false) ? clone(EMPTY) : buildSeedState();
+      setState(fresh);
+      if (EP.supa) EP.supa.clearAll().then(function () { if (reseed !== false) EP.supa.pushAll(fresh); });
+      return state;
+    }
     state = clone(EMPTY);
     if (reseed !== false) seed();
     save();
     return state;
   }
 
-  function clone(o) { return JSON.parse(JSON.stringify(o)); }
-
   /* ---- IDs -------------------------------------------------------------- */
   function id(prefix) {
+    if (!seeding && supaMode()) {
+      // ids globais para evitar colisão entre dispositivos
+      return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
     var s = load();
     s.counters[prefix] = (s.counters[prefix] || 0) + 1;
     return prefix + '_' + s.counters[prefix];
@@ -72,6 +123,7 @@ EP.db = (function () {
     if (!obj.createdAt) obj.createdAt = Date.now();
     s[coll].push(obj);
     save();
+    persistOp(coll, 'upsert', obj);
     return obj;
   }
 
@@ -80,6 +132,7 @@ EP.db = (function () {
     if (!item) return null;
     Object.assign(item, typeof patch === 'function' ? patch(item) : patch);
     save();
+    persistOp(coll, 'upsert', item);
     return item;
   }
 
@@ -87,6 +140,7 @@ EP.db = (function () {
     var s = load();
     s[coll] = s[coll].filter(function (x) { return x.id !== theId; });
     save();
+    persistOp(coll, 'delete', { id: theId });
   }
 
   /* ---- Conveniências ---------------------------------------------------- */
@@ -268,7 +322,8 @@ EP.db = (function () {
   }
 
   return {
-    load: load, save: save, reset: reset, id: id,
+    load: load, save: save, reset: reset, id: id, touch: touch,
+    setState: setState, buildSeedState: buildSeedState, mergeRemote: mergeRemote, supaMode: supaMode,
     all: all, get: get, query: query, insert: insert, update: update, remove: remove,
     userByEmail: userByEmail, orgById: orgById, orgOfUser: orgOfUser,
     needsOfOrg: needsOfOrg, donationsForOrg: donationsForOrg, donationsForDonor: donationsForDonor,

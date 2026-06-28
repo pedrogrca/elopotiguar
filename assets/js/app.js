@@ -187,19 +187,78 @@ EP.app = (function () {
   }
 
   /* ---- Boot ------------------------------------------------------------- */
+  var liveBusy = false;                 // pausa o re-render remoto durante simulação/GPS
+  function setLiveBusy(v) { liveBusy = !!v; }
+
+  function overlay(html) {
+    var ov = EP.ui.$('#boot-overlay');
+    if (!ov) { ov = el('div#boot-overlay.boot-overlay'); document.body.appendChild(ov); }
+    EP.ui.clear(ov); ov.appendChild(el('div.boot-overlay__box', { html: html }));
+    return ov;
+  }
+  function hideOverlay() { var ov = EP.ui.$('#boot-overlay'); if (ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function ready() { console.log('%c' + EP.config.app.name + ' pronto (' + (EP.db.supaMode() ? 'Supabase' : 'local') + ').', 'color:#0e7c66;font-weight:bold'); }
+
   function boot() {
     headerRoot = EP.ui.$('#header');
     viewRoot = EP.ui.$('#view');
-    EP.db.load();                 // carrega/semeia o banco
     window.addEventListener('hashchange', render);
     EP.bus.on('auth:changed', function () { EP.auth.refresh(); renderHeader(); });
-    EP.bus.on('notif:changed', refreshBell);   // atualiza o contador do sininho ao vivo
+    EP.bus.on('notif:changed', refreshBell);   // contador do sininho ao vivo
     if (!location.hash) location.hash = '#/';
-    render();
-    console.log('%c' + EP.config.app.name + ' pronto.', 'color:#0e7c66;font-weight:bold');
+
+    if (EP.db.supaMode()) bootSupabase();
+    else { EP.db.load(); render(); ready(); }
   }
 
-  return { boot: boot, go: go, render: render, onCleanup: onCleanup, parseRoute: parseRoute };
+  async function bootSupabase() {
+    overlay('<div class="boot-spinner"></div><h3>Conectando ao Supabase…</h3><p class="muted">Carregando dados do servidor.</p>');
+    try {
+      var r = await EP.supa.init();
+      EP.db.setState(r.state);
+      EP.auth.refresh();
+      setupRealtime();
+      hideOverlay();
+      render(); ready();
+      if (r.seeded) EP.ui.toast('Banco criado no Supabase com dados de exemplo. 🎉', 'success');
+    } catch (e) {
+      console.error(e);
+      var msg = (e && (e.message || e.code)) ? (e.message || e.code) : String(e);
+      var missing = /PGRST|schema cache|does not exist|Could not find the table|relation .* does not exist/i.test(msg);
+      if (missing) {
+        overlay('<h3>⚠️ Falta criar as tabelas</h3>'
+          + '<p>Rode o script <code>supabase/schema.sql</code> no <b>SQL Editor</b> do seu projeto Supabase e recarregue.</p>'
+          + '<button class="btn btn--primary" onclick="location.reload()">Já rodei — recarregar</button>'
+          + '<p class="muted tiny" style="margin-top:12px">Para usar offline: em <code>assets/js/config.js</code> mude <code>backend.mode</code> para <code>\'local\'</code>.</p>');
+      } else {
+        overlay('<h3>Não foi possível conectar ao Supabase</h3><p class="muted">' + EP.ui.esc(msg) + '</p>'
+          + '<button class="btn btn--primary" onclick="location.reload()">Tentar de novo</button>');
+      }
+    }
+  }
+
+  var remoteTimer = null;
+  function setupRealtime() {
+    EP.supa.subscribe(function (coll, payload) {
+      var newRow = payload['new'] && payload['new'].doc;
+      var oldId = payload['old'] && payload['old'].id;
+      if (payload.eventType === 'DELETE') EP.db.mergeRemote(coll, 'delete', { id: oldId });
+      else if (newRow) EP.db.mergeRemote(coll, 'upsert', newRow);
+
+      // espelha eventos para a UI ao vivo (mapas, sininho) — agora entre dispositivos
+      if (coll === 'deliveries' && newRow) {
+        if (newRow.delivererLocation) EP.bus.emit('delivery:moved', { deliveryId: newRow.id, lat: newRow.delivererLocation.lat, lng: newRow.delivererLocation.lng, at: newRow.delivererLocation.at });
+        EP.bus.emit('delivery:changed', { deliveryId: newRow.id });
+      }
+      if (coll === 'notifications') EP.bus.emit('notif:changed', {});
+      if (coll === 'donations' && newRow) EP.bus.emit('donation:changed', { donationId: newRow.id });
+
+      // re-render leve para listas (pausado durante simulação/GPS local)
+      if (!liveBusy) { clearTimeout(remoteTimer); remoteTimer = setTimeout(render, 400); }
+    });
+  }
+
+  return { boot: boot, go: go, render: render, onCleanup: onCleanup, parseRoute: parseRoute, setLiveBusy: setLiveBusy };
 })();
 
 document.addEventListener('DOMContentLoaded', EP.app.boot);

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "PowerShell($ErrorActionPreference='SilentlyContinue'; \"node: \" + \\(Get-Command node\\).Source; node --version; \"npm: \" + \\(Get-Command npm\\).Source; npm --version)",
+      "PowerShell($ErrorActionPreference='SilentlyContinue'; \"python: \" + \\(Get-Command python\\).Source; \"py: \" + \\(Get-Command py\\).Source; \"git: \" + \\(Get-Command git\\).Source)",
+      "PowerShell(python --version)",
+      "PowerShell(py --version)",
+      "PowerShell($ErrorActionPreference='SilentlyContinue')",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

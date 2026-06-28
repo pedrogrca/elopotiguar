@@ -264,6 +264,21 @@ surge .          # escolha um domínio .surge.sh
 
 ---
 
+## 🟢 Modo Supabase (backend real — já incluso)
+
+O app roda em dois modos, alternáveis em [`assets/js/config.js`](assets/js/config.js) → `backend.mode`:
+- **`local`** — dados no navegador (localStorage), sem servidor.
+- **`supabase`** — backend real: **Postgres + Realtime**, com sincronização **entre dispositivos** (é assim que o GPS/entrega aparece ao vivo em outro celular).
+
+**Como funciona:** no boot, o app baixa todas as tabelas para um cache em memória (mantendo as telas síncronas); cada escrita sobe um registro (`tabela = id text, doc jsonb`) e o **Realtime** propaga as mudanças para os outros dispositivos. Arquivo da integração: [`assets/js/supa.js`](assets/js/supa.js).
+
+### Ativar (uma vez)
+1. No Supabase: **SQL Editor → New query** → cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
+2. Em `config.js`, confirme `backend.mode: 'supabase'` e preencha `url` + `anonKey` (⚙️ *Project Settings → API*).
+3. Recarregue o app — na 1ª vez ele **cria os dados de exemplo automaticamente** no Supabase.
+
+> A `anon key` é pública (vai no navegador, protegida por RLS). As políticas do `schema.sql` são **permissivas (protótipo)**; antes de abrir ao público, restrinja a RLS e migre o login para **Supabase Auth** (hoje a autenticação é por tabela). Para voltar ao offline, mude `backend.mode` para `'local'`.
+
 ## 🔁 Evoluir para um backend real
 
 Quando quiser multiusuário de verdade (dados compartilhados entre dispositivos), o caminho natural:

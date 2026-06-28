@@ -63,7 +63,7 @@ EP.logic = (function () {
     d.statusHistory = d.statusHistory || [];
     d.statusHistory.push({ status: status, at: Date.now(), by: byUserId || 'sistema', note: note || '' });
     d.status = status;
-    EP.db.save();
+    EP.db.touch('donations', d);
     if (STATUS_POINTS[status]) awardPoints(d.orgId, STATUS_POINTS[status], 'Doação: ' + status, donationId);
     var org = EP.db.orgById(d.orgId);
     notify(d.donorId, 'Sua doação para ' + (org ? org.name : 'a organização') + ' agora está: ' + statusMeta(status).icon + ' ' + status, statusMeta(status).icon, '#/doacao/' + donationId);
@@ -90,7 +90,7 @@ EP.logic = (function () {
     if (data.needsDelivery && data.type === 'material') {
       var del = createDelivery(d, org);
       d.delivery = del.id;
-      EP.db.save();
+      EP.db.touch('donations', d);
     }
     var owner = orgOwnerId(org.id);
     if (owner) notify(owner, 'Nova doação de ' + user.name + ': ' + (d.type === 'financial' ? C.currency(d.amount) : d.description), '📦', '#/painel?tab=org');
@@ -129,7 +129,7 @@ EP.logic = (function () {
     del.acceptedAt = Date.now();
     del.routeIndex = 0;
     del.delivererLocation = { lat: del.route[0].lat, lng: del.route[0].lng, at: Date.now() };
-    EP.db.save();
+    EP.db.touch('deliveries', del);
     advanceDonation(del.donationId, 'Em rota', delivererId, 'Entregador a caminho da coleta.');
     var deliverer = EP.db.get('users', delivererId);
     notify(del.donorId, (deliverer ? deliverer.name : 'Um entregador') + ' aceitou sua entrega e está a caminho! 🛵', '🛵', '#/doacao/' + del.donationId);
@@ -142,7 +142,7 @@ EP.logic = (function () {
     var del = EP.db.get('deliveries', deliveryId);
     if (!del) return null;
     del.status = status;
-    EP.db.save();
+    EP.db.touch('deliveries', del);
     EP.bus.emit('delivery:changed', { deliveryId: del.id });
     return del;
   }
@@ -152,7 +152,7 @@ EP.logic = (function () {
     if (!del) return null;
     del.delivererLocation = { lat: lat, lng: lng, at: Date.now() };
     if (routeIndex != null) del.routeIndex = routeIndex;
-    EP.db.save();
+    EP.db.touch('deliveries', del);
     EP.bus.emit('delivery:moved', { deliveryId: del.id, lat: lat, lng: lng, at: del.delivererLocation.at });
     return del;
   }
@@ -168,7 +168,7 @@ EP.logic = (function () {
       del.delivererLocation = { lat: end.lat, lng: end.lng, at: Date.now() };
       del.routeIndex = del.route.length - 1;
     }
-    EP.db.save();
+    EP.db.touch('deliveries', del);
     advanceDonation(del.donationId, 'Recebido', del.delivererId, 'Entrega confirmada pelo código de segurança.');
     notify(del.donorId, 'Sua doação foi entregue e recebida pela organização ✅', '✅', '#/doacao/' + del.donationId);
     var oid2 = orgOwnerId(del.orgId); if (oid2) notify(oid2, 'Entrega concluída e confirmada por código ✅', '✅', '#/painel?tab=org');
@@ -218,8 +218,7 @@ EP.logic = (function () {
     return EP.db.query('notifications', function (n) { return n.userId === userId && !n.read; }).length;
   }
   function markAllRead(userId) {
-    EP.db.all('notifications').forEach(function (n) { if (n.userId === userId) n.read = true; });
-    EP.db.save();
+    EP.db.all('notifications').forEach(function (n) { if (n.userId === userId && !n.read) EP.db.update('notifications', n.id, { read: true }); });
     EP.bus.emit('notif:changed', { userId: userId });
   }
 
@@ -261,7 +260,7 @@ EP.logic = (function () {
     if (!d) return null;
     d.allocations = d.allocations || [];
     d.allocations.push({ id: EP.db.id('alo'), description: alloc.description, amount: Number(alloc.amount) || 0, note: alloc.note || '', at: Date.now() });
-    EP.db.save();
+    EP.db.touch('donations', d);
     var org = EP.db.orgById(d.orgId);
     notify(d.donorId, (org ? org.name : 'A organização') + ' detalhou o uso da sua doação: ' + alloc.description, '💰', '#/doacao/' + donationId);
     EP.bus.emit('donation:changed', { donationId: donationId });

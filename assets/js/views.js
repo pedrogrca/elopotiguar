@@ -489,14 +489,28 @@ EP.views = (function () {
     var cityIn = input({ placeholder: 'Sua cidade', value: 'Natal' });
 
     var roleBtns = {};
+    // "Organização" é exclusivo: uma conta é de uma pessoa OU de uma organização.
+    function setRoleStates() {
+      Object.keys(roleBtns).forEach(function (k) {
+        roleBtns[k].classList.toggle('role-btn--on', roles.indexOf(k) >= 0);
+      });
+    }
     var roleRow = el('div.role-pick', {}, Object.keys(cfg.roles).map(function (k) {
       var r = cfg.roles[k];
-      var b = el('button.role-btn', { class: roles.indexOf(k) >= 0 ? 'role-btn--on' : '', onClick: function () {
-        var i = roles.indexOf(k); if (i >= 0) roles.splice(i, 1); else roles.push(k);
-        b.classList.toggle('role-btn--on'); renderExtra();
+      var b = el('button.role-btn', { type: 'button', onClick: function () {
+        if (k === 'org') {
+          // selecionar Organização limpa os papéis pessoais (e ao reclicar, desmarca)
+          roles = (roles.indexOf('org') >= 0) ? [] : ['org'];
+        } else {
+          // selecionar um papel pessoal sai do modo Organização
+          var oi = roles.indexOf('org'); if (oi >= 0) roles.splice(oi, 1);
+          var i = roles.indexOf(k); if (i >= 0) roles.splice(i, 1); else roles.push(k);
+        }
+        setRoleStates(); renderExtra();
       } }, [el('span.role-btn__emoji', { text: r.emoji }), el('span', { text: r.label })]);
       roleBtns[k] = b; return b;
     }));
+    setRoleStates();
 
     // campos extras (voluntário / organização)
     var skillsChips = multiChips(cfg.skills, []);
@@ -545,7 +559,7 @@ EP.views = (function () {
     return el('div.auth-page', {}, [
       el('div.card.auth-card.auth-card--wide', {}, [
         el('h1', { text: 'Criar conta' }),
-        el('p.muted', { text: 'Você pode ter mais de um papel (ex.: doar e ser voluntário).' }),
+        el('p.muted', { text: 'Conta de pessoa: combine Doador, Voluntário e Entregador. "Organização" é um tipo de conta à parte.' }),
         el('div.form-grid', {}, [field('Nome', nameIn), field('Cidade', cityIn), field('E-mail', emailIn), field('Senha', passIn)]),
         field('Eu quero participar como:', roleRow),
         extraHost,
@@ -1019,12 +1033,13 @@ EP.views = (function () {
       var simBtn = el('button.btn.btn--sm.btn--info');
       simBtn.textContent = simTimer ? '⏸ Pausar simulação' : '▶ Simular trajeto (GPS)';
       simBtn.onclick = function () {
-        if (simTimer) { clearInterval(simTimer); simTimer = null; renderControls(); return; }
+        if (simTimer) { clearInterval(simTimer); simTimer = null; EP.app.setLiveBusy(false); renderControls(); return; }
+        EP.app.setLiveBusy(true);   // pausa re-render remoto durante a simulação
         simTimer = setInterval(function () {
           var fresh = EP.db.get('deliveries', del.id);
           var idx = (fresh.routeIndex || 0) + 1;
           if (idx >= fresh.route.length) {
-            clearInterval(simTimer); simTimer = null;
+            clearInterval(simTimer); simTimer = null; EP.app.setLiveBusy(false);
             if (del.status === 'Aceita') EP.logic.setDeliveryStatus(del.id, 'Coletado');
             EP.ui.toast('Você chegou ao destino. Confirme a entrega com o código.', 'info');
             renderControls();
@@ -1038,7 +1053,7 @@ EP.views = (function () {
           map.update({ courier: pt, follow: true });
         }, cfg.map.gpsUpdateMs);
         renderControls();
-        EP.app.onCleanup(function () { if (simTimer) clearInterval(simTimer); });
+        EP.app.onCleanup(function () { if (simTimer) clearInterval(simTimer); EP.app.setLiveBusy(false); });
       };
       controls.appendChild(simBtn);
 
@@ -1093,7 +1108,8 @@ EP.views = (function () {
       map.update({ courier: { lat: lat, lng: lng }, follow: true });
     }, function (err) { EP.ui.toast('Não foi possível obter GPS: ' + err.message, 'danger'); },
       { enableHighAccuracy: true, maximumAge: 1000 });
-    EP.app.onCleanup(function () { navigator.geolocation.clearWatch(watchId); });
+    EP.app.setLiveBusy(true);   // pausa re-render remoto durante o rastreamento
+    EP.app.onCleanup(function () { navigator.geolocation.clearWatch(watchId); EP.app.setLiveBusy(false); });
     EP.ui.toast('Rastreamento GPS real ativo. 📍', 'success');
   }
 
